@@ -21,5 +21,5 @@ def load_old_english_dataset(test_size:float = 0.1, val_size:float = 0.1, /, see
 
     return train_ds, val_ds, test_ds
 
-train_ds, val_ds, test_ds = load_old_english_dataset()
-print("Train: ", len(train_ds), "Val: ", len(val_ds), "Test ", len(test_ds))
+#train_ds, val_ds, test_ds = load_old_english_dataset()
+#print("Train: ", len(train_ds), "Val: ", len(val_ds), "Test ", len(test_ds))

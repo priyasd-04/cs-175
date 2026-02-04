@@ -1,0 +1,7 @@
+import transformers
+
+#just leaving this here, i don't think we'll have a big enough corpus to train a very large
+#tokenizer, it'll probably be easy to just use something pre-trained, gpt2 seems nice
+tokenizer = transformers.AutoTokenizer.from_pretrained("gpt2") 
+tokens = tokenizer("We should use the gpt2 tokenizer")
+print(tokenizer.decode(tokens['input_ids']))
