@@ -1,4 +1,3 @@
-import transformers
 import sklearn
 from load_datasets import load_shakespeare_dataset
 from monkeys.generator import random_monkey
@@ -9,9 +8,10 @@ import numpy as np
 #just leaving this here, i don't think we'll have a big enough corpus to train a very large
 #tokenizer, it'll probably be easy to just use something pre-trained, gpt2 seems nice
 
-#tokenizer = transformers.AutoTokenizer.from_pretrained("gpt2") 
-#tokens = tokenizer("We should use the gpt2 tokenizer")
-#print(tokenizer.decode(tokens['input_ids']))
+# tokenizer idea (not used in baseline):
+# tokenizer = transformers.AutoTokenizer.from_pretrained("gpt2")
+# tokens = tokenizer("We should use the gpt2 tokenizer")
+# print(tokenizer.decode(tokens["input_ids"]))
 
 class Noise_Shakespeare_Classifier:
     def __init__(self, seed=13625442):
