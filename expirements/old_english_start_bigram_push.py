@@ -12,18 +12,19 @@ corpus, then iteratively nudges it toward Shakespeare style by:
 from __future__ import annotations
 
 import argparse
+import binascii
 import os
 import sys
 from pathlib import Path
 from statistics import mean
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from classifier.judge import Noise_Shakespeare_Classifier
-from load_datasets import load_old_english_dataset
+from load_datasets import load_old_english_dataset, load_shakespeare_dataset
 from monkeys.bigram import BigramModel
 
 
@@ -79,6 +80,86 @@ def _iter_seed(base_seed: int, it: int, i: int) -> int:
     return base_seed * 100_000 + it * 1_000 + i
 
 
+def _char_ngrams(text: str, n: int) -> set[str]:
+    text = text.strip()
+    if n <= 0 or len(text) < n:
+        return set()
+    return {text[i : i + n] for i in range(len(text) - n + 1)}
+
+
+def _signature_ngrams(ngrams: set[str], k: int) -> list[str]:
+    """Pick k stable 'signature' ngrams (smallest crc32) for indexing."""
+    if not ngrams or k <= 0:
+        return []
+    scored = [(binascii.crc32(ng.encode("utf-8")) & 0xFFFFFFFF, ng) for ng in ngrams]
+    scored.sort(key=lambda x: x[0])
+    return [ng for _, ng in scored[:k]]
+
+
+class AntiCopyChecker:
+    """Detect near-duplicate text vs reference lines using char n-grams.
+
+    We use a "containment" score rather than plain Jaccard:
+        containment(text, ref) = |ngrams(text) ∩ ngrams(ref)| / |ngrams(ref)|
+
+    This is better when `text` is long (300 chars) and `ref` is short,
+    because a copied line should have high containment even if Jaccard is low.
+    """
+
+    def __init__(
+        self,
+        reference_texts: Sequence[str],
+        *,
+        ngram: int = 5,
+        signatures_per_text: int = 12,
+        max_candidates: int = 2000,
+    ) -> None:
+        self.ngram = int(ngram)
+        self.signatures_per_text = int(signatures_per_text)
+        self.max_candidates = int(max_candidates)
+
+        self._ref_ngrams: list[set[str]] = []
+        self._sig_index: dict[str, list[int]] = {}
+
+        for idx, raw in enumerate(reference_texts):
+            ng = _char_ngrams(raw, self.ngram)
+            self._ref_ngrams.append(ng)
+            for sig in _signature_ngrams(ng, self.signatures_per_text):
+                self._sig_index.setdefault(sig, []).append(idx)
+
+    def max_similarity(self, text: str) -> float:
+        """Maximum containment similarity to any reference line (0..1)."""
+        text_ngrams = _char_ngrams(text, self.ngram)
+        if not text_ngrams:
+            return 0.0
+
+        # Candidate pruning via signature index.
+        candidates: set[int] = set()
+        for sig in _signature_ngrams(text_ngrams, self.signatures_per_text):
+            for idx in self._sig_index.get(sig, []):
+                candidates.add(idx)
+                if len(candidates) >= self.max_candidates:
+                    break
+            if len(candidates) >= self.max_candidates:
+                break
+
+        if not candidates:
+            return 0.0
+
+        best = 0.0
+        for idx in candidates:
+            ref = self._ref_ngrams[idx]
+            if not ref:
+                continue
+            inter = len(text_ngrams & ref)
+            if inter == 0:
+                continue
+            sim = inter / len(ref)
+            if sim > best:
+                best = sim
+        return float(best)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Old English bigram → judge-guided Shakespeare push")
     ap.add_argument("--iterations", type=int, default=40, help="Number of update iterations")
@@ -109,6 +190,36 @@ def main() -> None:
         help="Optional factor in (0,1]. If set, old counts decay each iteration before adding new ones.",
     )
     ap.add_argument(
+        "--anti-copy",
+        action="store_true",
+        help="Drop/zero-weight samples that are near-duplicates of Shakespeare training lines",
+    )
+    ap.add_argument("--copy-ngram", type=int, default=5, help="n for character n-grams in anti-copy check")
+    ap.add_argument(
+        "--copy-threshold",
+        type=float,
+        default=0.80,
+        help="If max containment similarity >= threshold, treat sample as too similar (0..1)",
+    )
+    ap.add_argument(
+        "--copy-ref-lines",
+        type=int,
+        default=5000,
+        help="How many Shakespeare lines to use as anti-copy reference",
+    )
+    ap.add_argument(
+        "--copy-signatures",
+        type=int,
+        default=12,
+        help="How many signature n-grams to index per reference/sample (speed/quality tradeoff)",
+    )
+    ap.add_argument(
+        "--copy-max-candidates",
+        type=int,
+        default=2000,
+        help="Max candidate reference lines checked per sample (caps runtime)",
+    )
+    ap.add_argument(
         "--final-n",
         type=int,
         default=60,
@@ -130,6 +241,21 @@ def main() -> None:
         raise FileNotFoundError(f"Expected noise file at '{NOISE_FILE}'.")
     judge.train(NOISE_FILE, show_report=False)
 
+    anti_copy: AntiCopyChecker | None = None
+    if args.anti_copy:
+        sp = load_shakespeare_dataset(0.0, 0.0, seed=args.seed)
+        ref_lines = [str(x).strip() for x in sp[: args.copy_ref_lines] if str(x).strip()]
+        anti_copy = AntiCopyChecker(
+            ref_lines,
+            ngram=args.copy_ngram,
+            signatures_per_text=args.copy_signatures,
+            max_candidates=args.copy_max_candidates,
+        )
+        print(
+            f"Anti-copy enabled | ref_lines={len(ref_lines)} | ngram={args.copy_ngram} | "
+            f"threshold={args.copy_threshold}"
+        )
+
     # 3) Iteratively push bigram toward Shakespeare.
     print("\nIterating...")
     for it in range(args.iterations):
@@ -138,15 +264,32 @@ def main() -> None:
 
         _summarize(f"iter{it}", scores)
 
+        keep_mask: list[bool] = [True] * len(samples)
+        if anti_copy is not None:
+            sims = [anti_copy.max_similarity(t) for t in samples]
+            threshold = float(args.copy_threshold)
+            keep_mask = [s < threshold for s in sims]
+            kept = sum(keep_mask)
+            copy_rate = 1.0 - (kept / len(keep_mask))
+            print(
+                f"{'':>10s} | anti_copy copy_rate={copy_rate:.3f} | "
+                f"mean_sim={mean(sims):.3f} | max_sim={max(sims):.3f}"
+            )
+
         if args.mode == "topk":
-            ranked = sorted(zip(scores, samples), reverse=True)
-            best_texts = [t for _, t in ranked[: args.top_k]]
+            ranked = sorted(zip(scores, samples, keep_mask), key=lambda x: x[0], reverse=True)
+            filtered = [(p, t) for p, t, keep in ranked if keep]
+            if not filtered:
+                filtered = [(p, t) for p, t, _ in ranked]
+            best_texts = [t for _, t in filtered[: args.top_k]]
             bigram.partial_fit(best_texts, decay=args.decay)
         else:
             # Normalize weights, then scale so update magnitude is meaningful.
             total = float(sum(max(0.0, s) for s in scores)) or 1.0
             scale = float(args.weight_scale) if args.weight_scale is not None else float(args.top_k)
             weights = [scale * (max(0.0, s) / total) for s in scores]
+            if anti_copy is not None:
+                weights = [w if keep else 0.0 for w, keep in zip(weights, keep_mask)]
             bigram.partial_fit(samples, weights=weights, decay=args.decay)
 
     # Show a few best samples at the end.
