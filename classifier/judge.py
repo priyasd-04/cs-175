@@ -1,5 +1,5 @@
 import sklearn
-from load_datasets import load_shakespeare_dataset
+from utils.load_datasets import load_shakespeare_dataset
 from monkeys.generator import random_monkey
 from random import randint
 from os import makedirs, path
