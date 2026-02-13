@@ -49,6 +49,7 @@ def load_shakespeare_dataset(val_size:float = 0.1, test_size:float = 0.1,  /, se
     return train_ds, val_ds, test_ds
 
 #train_ds = load_old_english_dataset(0.0, 0.0)
+#print(train_ds[10])
 #print("Train: ", len(train_ds), "Val: ", len(val_ds), "Test ", len(test_ds))
 #text_lengths = [(len(x)) for x in train_ds]
 #print(len(train_ds))

@@ -4,11 +4,14 @@ from torch.nn import functional as F
 import torch.optim as optim
 from utils.load_datasets import load_old_english_dataset
 
+EOS_TOKEN = '\t'
+
 class CharTokenizer:
     def __init__(self, text):
         self.chars = sorted(list(set(text)))
-        self.vocab_size = len(self.chars)
+        self.chars.append(EOS_TOKEN)
 
+        self.vocab_size = len(self.chars)
         self.stoi = { ch:i for i,ch in enumerate(self.chars) }
         self.itos = { i:ch for i,ch in enumerate(self.chars) }
 
@@ -19,7 +22,7 @@ class CharTokenizer:
     
 
 class TransformerMonkey(nn.Module):
-    def __init__(self, vocab_size, n_embd=64, n_head=4, n_layer=3, block_size=64):
+    def __init__(self, vocab_size, n_embd=64, n_head=4, n_layer=3, block_size=128):
         """
         :param vocab_size: character amount
         :param n_embd: Embedding size of each vocabulary word, affects ability to capture more dimensions.
@@ -28,6 +31,7 @@ class TransformerMonkey(nn.Module):
         :param block_size: Context window sizes, affects how contextually coherent each output is.
         """
         super().__init__()
+        self.block_size = block_size
         #Token Embedding Table: The lookup table that each character is mapped to. 
         #Size(vocab_size,n_embed) as in each row is a vocab word with n_embed columns if information
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
@@ -37,8 +41,9 @@ class TransformerMonkey(nn.Module):
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
         
         #Initialize n_layer count of transformer layers.  
-        self.blocks = nn.Sequential(*[nn.TransformerEncoderLayer(
-            d_model=n_embd, nhead=n_head, batch_first=True) for _ in range(n_layer)])
+        encoder_layer = nn.TransformerEncoderLayer(d_model=n_embd, nhead=n_head, batch_first=True)
+        
+        self.blocks = nn.TransformerEncoder(encoder_layer, num_layers=n_layer)
         
         #LayerNorm keeps our vectors normalized (~std deviation of 1)
         self.ln_f = nn.LayerNorm(n_embd)
@@ -54,8 +59,11 @@ class TransformerMonkey(nn.Module):
         pos_emb = self.position_embedding_table(torch.arange(T, device=idx.device))
         x = tok_emb + pos_emb
 
+        #create a mask for prior inputs
+        mask = nn.Transformer.generate_square_subsequent_mask(T).to(idx.device)
+
         #run the transformer layers
-        x = self.blocks(x)
+        x = self.blocks(x, mask, is_causal=True)
 
         #run the normalization layer
         logits = self.lm_head(self.ln_f(x))
@@ -69,15 +77,17 @@ class TransformerMonkey(nn.Module):
 
         return logits, loss
 
-    def generate(self, idx, max_new_tokens):
+    def generate(self, idx, max_new_tokens, stop_token = EOS_TOKEN, temperature = 0.8):
         for _ in range(max_new_tokens):
-            idx_cond = idx[:, -64:]
+            idx_cond = idx[:, -self.block_size:]
             logits, _ = self(idx_cond) #run the model on everything in context
 
             logits = logits[:, -1, :] #pluck the last logit
-            probs = F.softmax(logits, dim=-1)
+            probs = F.softmax(logits/temperature, dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1) # choose a random idx to generate
             idx = torch.cat((idx, idx_next), dim=1) # add the idx to the data
+            if tokenizer.stoi[EOS_TOKEN] == idx_next:
+                break
         return idx
 
 def train_monkey(text_data, epochs=5000, batch_size=32, block_size=64):
@@ -115,17 +125,17 @@ def train_monkey(text_data, epochs=5000, batch_size=32, block_size=64):
 
 if __name__ == '__main__':
     print("Loading Datasets...")
-    train_ds, val_ds, test_ds = load_old_english_dataset(0.1, 0.1, seed=13625442)
+    train_ds = load_old_english_dataset(0, 0, seed=13625442)
 
-    full_corpus = "\n".join(train_ds) 
+    full_corpus = EOS_TOKEN.join(train_ds) 
 
     print(f"Training Started...")
-    model, tokenizer, device = train_monkey(full_corpus, epochs=1000, batch_size=32, block_size=64)
+    model, tokenizer, device = train_monkey(full_corpus, epochs=1000, batch_size=32, block_size=128)
 
     model.eval() # Switch to evaluation mode (turns off dropout)
     
     
-    prompts = ["To be, or not to be", "The", "Romeo, where for out thou Romeo", "My family's blacksmith ", "Today I "]
+    prompts = ["To be, or not to be", "The", "Romeo, where for out thou Romeo", "My familys blacksmith ", "Today I "]
     with torch.no_grad():
         for prompt in prompts:
             print(f"\nPrompt: '{prompt}'")
