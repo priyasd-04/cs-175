@@ -1,5 +1,4 @@
 from monkeys.TransformerMonkey import CharTokenizer, TransformerMonkey
-from utils.load_datasets import load_old_english_dataset
 from pathlib import Path
 import torch
 
