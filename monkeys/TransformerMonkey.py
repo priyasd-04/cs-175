@@ -4,6 +4,9 @@ from torch.nn import functional as F
 import torch.optim as optim
 from utils.load_datasets import load_old_english_dataset
 
+from pathlib import Path
+import pickle
+
 EOS_TOKEN = '\t'
 
 class CharTokenizer:
@@ -19,6 +22,18 @@ class CharTokenizer:
         return [self.stoi[c] for c in s]
     def decode(self, l):
         return ''.join([self.itos[i] for i in l])
+    
+    def saveTokenizer(self, path):
+        """Saves the tokenizer, expecting path of structure Path.cwd() / folder / tokenizerName.pkl"""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, 'wb') as f:
+            pickle.dump(self, f)
+
+    @staticmethod
+    def loadTokenizer(path):
+        with open(path, 'rb') as f:
+            return pickle.load(f)
     
 
 class TransformerMonkey(nn.Module):
@@ -86,9 +101,22 @@ class TransformerMonkey(nn.Module):
             probs = F.softmax(logits/temperature, dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1) # choose a random idx to generate
             idx = torch.cat((idx, idx_next), dim=1) # add the idx to the data
-            if tokenizer.stoi[EOS_TOKEN] == idx_next:
-                break
+            #if tokenizer.stoi[EOS_TOKEN] == idx_next:
+                #break
         return idx
+    
+    def saveModel(self, path):
+        """Save the model, expecting a path of structure path.cwd() / folder / modelName.pt"""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(self.state_dict(), path)
+
+    def loadModel(self, path):
+        path = Path(path)
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.load_state_dict(torch.load(path, weights_only=True, map_location=device))
+        self.to(device)
+
 
 def train_monkey(text_data, epochs=5000, batch_size=32, block_size=64):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -146,3 +174,13 @@ if __name__ == '__main__':
             generated_indices = model.generate(context, max_new_tokens=150)
             output_text = tokenizer.decode(generated_indices[0].tolist())
             print(f"Generated: {output_text}")
+
+    print("Saving Monkey...")
+    path = Path.cwd() / "models" / "SmallTransformerMonkey.pt"
+    model.saveModel(path)
+
+    print("Saving Tokenizer...")
+    path = Path.cwd() / "tokenizers" / "oldEnglishCharTokenizer.pkl"
+    tokenizer.saveTokenizer(path)
+
+    print(f"Save Successful! {path}")

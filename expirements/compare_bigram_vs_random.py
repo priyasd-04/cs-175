@@ -13,7 +13,7 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from classifier.judge import Noise_Shakespeare_Classifier
-from load_datasets import load_shakespeare_dataset
+from utils.load_datasets import load_shakespeare_dataset
 from monkeys.bigram import BigramModel
 from monkeys.generator import random_monkey
 
