@@ -28,7 +28,7 @@ model, tokenizer, final_test_loss = train_monkey(
     lr=1e-3,
     dropout=0.3,
     writer=True,
-    model_path="models/experiments2",
+    model_path="models/experiments1",
     val_split=0.1,
     test_split=0.1
 )
