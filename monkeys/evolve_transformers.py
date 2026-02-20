@@ -1,148 +1,139 @@
+# evolution.py
+import copy
 import torch
-import torch.nn as nn
-from torch.nn import functional as F
-import torch.optim as optim
+import random
+from monkeys.TransformerMonkey import TransformerMonkey, train_monkey
+from classifier.transformer_judge import TransformerJudge
 from utils.load_datasets import load_old_english_dataset
 
-EOS_TOKEN = '\t'
+def mutate_model(model, mutation_rate=0.01, mutation_strength=0.05):
+    """Copy a model and change its weights slightly."""
+    child = copy.deepcopy(model)
+    with torch.no_grad():
+        for param in child.parameters():
+            if random.random() < mutation_rate:
+                # Add gaussian noise scaled by mutation_strength
+                noise = torch.randn_like(param) * mutation_strength
+                param.add_(noise)
+    return child
 
-class CharTokenizer:
-    def __init__(self, text):
-        self.chars = sorted(list(set(text)))
-        self.chars.append(EOS_TOKEN)
-
-        self.vocab_size = len(self.chars)
-        self.stoi = { ch:i for i,ch in enumerate(self.chars) }
-        self.itos = { i:ch for i,ch in enumerate(self.chars) }
-
-    def encode(self, s):
-        return [self.stoi[c] for c in s]
-    def decode(self, l):
-        return ''.join([self.itos[i] for i in l])
+def generate_sample(model, tokenizer, device, prompt=None, max_new_tokens=200):
+    """Generate a text sample from a monkey model."""
+    model.eval()
+    if prompt is None:
+        # start from a random seed token
+        start = torch.zeros((1, 1), dtype=torch.long, device=device)
+    else:
+        start = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long, device=device)
     
-
-class TransformerMonkey(nn.Module):
-    def __init__(self, vocab_size, n_embd=64, n_head=4, n_layer=3, block_size=128):
-        """
-        :param vocab_size: character amount
-        :param n_embd: Embedding size of each vocabulary word, affects ability to capture more dimensions.
-        :param n_head: How many attention heads running in parallel, affects ability to recognize more patterns.
-        :param n_layer: How many transformer layers in the model, affects complexity of the model.
-        :param block_size: Context window sizes, affects how contextually coherent each output is.
-        """
-        super().__init__()
-        self.block_size = block_size
-        #Token Embedding Table: The lookup table that each character is mapped to. 
-        #Size(vocab_size,n_embed) as in each row is a vocab word with n_embed columns if information
-        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
-
-        #Position Embedding Table: The positional information of each word in each position. 
-        #Size(block_size, n_embed): Each position in the context window gets n_embed columns of information.
-        self.position_embedding_table = nn.Embedding(block_size, n_embd)
-        
-        #Initialize n_layer count of transformer layers.  
-        encoder_layer = nn.TransformerEncoderLayer(d_model=n_embd, nhead=n_head, batch_first=True)
-        
-        self.blocks = nn.TransformerEncoder(encoder_layer, num_layers=n_layer)
-        
-        #LayerNorm keeps our vectors normalized (~std deviation of 1)
-        self.ln_f = nn.LayerNorm(n_embd)
-
-        #Linear maps the embedings back to vocab words
-        self.lm_head = nn.Linear(n_embd, vocab_size)
-
-    def forward(self, idx, targets=None):
-        B, T = idx.shape #Batch, Time -> The amount of sentences, the width of the context window
-
-        #Translate the input into embedded vectors
-        tok_emb = self.token_embedding_table(idx)
-        pos_emb = self.position_embedding_table(torch.arange(T, device=idx.device))
-        x = tok_emb + pos_emb
-
-        #create a mask for prior inputs
-        mask = nn.Transformer.generate_square_subsequent_mask(T).to(idx.device)
-
-        #run the transformer layers
-        x = self.blocks(x, mask, is_causal=True)
-
-        #run the normalization layer
-        logits = self.lm_head(self.ln_f(x))
-
-        loss = None
-        if targets is not None: #if we're training, calculate cross_entropy
-            B, T, C = logits.shape #Batch, Time, embed_length
-            logits = logits.view(B*T, C)
-            targets = targets.view(B*T)
-            loss = F.cross_entropy(logits, targets)
-
-        return logits, loss
-
-    def generate(self, idx, max_new_tokens, stop_token = EOS_TOKEN, temperature = 0.8):
-        for _ in range(max_new_tokens):
-            idx_cond = idx[:, -self.block_size:]
-            logits, _ = self(idx_cond) #run the model on everything in context
-
-            logits = logits[:, -1, :] #pluck the last logit
-            probs = F.softmax(logits/temperature, dim=-1)
-            idx_next = torch.multinomial(probs, num_samples=1) # choose a random idx to generate
-            idx = torch.cat((idx, idx_next), dim=1) # add the idx to the data
-            # if tokenizer.stoi[EOS_TOKEN] == idx_next:
-                # break
-        return idx
-
-def train_monkey(text_data, epochs=5000, batch_size=32, block_size=64):
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"Training on: {device}")
-
-    tokenizer = CharTokenizer(text_data)
-    data = torch.tensor(tokenizer.encode(text_data), dtype=torch.long)
-
-    model = TransformerMonkey(tokenizer.vocab_size, block_size=block_size).to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=1e-3)
-
-    def get_batch(): #batches are randomized to train in the middle of the dataset, to avoid memorizing starts or ends
-        ix = torch.randint(len(data) - block_size, (batch_size,))
-        x = torch.stack([data[i:i+block_size] for i in ix])
-        y = torch.stack([data[i+1:i+block_size+1] for i in ix])
-        return x.to(device), y.to(device)
+    with torch.no_grad():
+        generated = model.generate(start, max_new_tokens=max_new_tokens)
     
-    model.train()
-    for epoch in range(epochs):
-        xb, yb = get_batch()
+    return tokenizer.decode(generated[0].tolist())
 
-        # Forward pass
-        logits, loss = model(xb, yb)
+def score_monkey(model, judge, tokenizer, device, n_samples=3):
+    """
+    Score monkey by averaging judge scores across multiple samples.
+    """
+    scores = []
+    for _ in range(n_samples):
+        text = generate_sample(model, tokenizer, device)
+        encoded = torch.tensor(
+            [tokenizer.encode(text)], dtype=torch.long, device=device
+        )
+        encoded = encoded[:, -judge.transformer.block_size:]  # clamp to block size
+        with torch.no_grad():
+            score = judge(encoded).item()
+        scores.append(score)
+    return sum(scores) / len(scores)
+
+def evolve(
+    base_model,        # pretrained TransformerMonkey to seed the population
+    judge,             # TransformerJudge
+    tokenizer,
+    device,
+    population_size=20,
+    max_generations=50,
+    top_k=5,           # how many survive each generation
+    mutation_rate=0.3, # probability that any given parameter tensor gets mutated
+    mutation_strength=0.05, # how large the weight perturbations are
+):
+    # seed population from base model with initial mutations
+    population = [mutate_model(base_model, mutation_rate, mutation_strength) 
+                  for _ in range(population_size)]
+
+    best_monkey = None
+    best_score_ever = -1
+
+    for generation in range(max_generations):
+        # score every monkey
+        scored = [
+            (score_monkey(m, judge, tokenizer, device), m) 
+            for m in population
+        ]
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        best_score, best_monkey_this_gen = scored[0]
         
-        # Backward pass
-        optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        optimizer.step()
+        # track overall best
+        if best_score > best_score_ever:
+            best_score_ever = best_score
+            best_monkey = copy.deepcopy(best_monkey_this_gen)
 
-        if epoch % 500 == 0:
-            print(f"Epoch {epoch}: Loss {loss.item():.4f}")
+        if generation % 5 == 0:
+            sample = generate_sample(best_monkey_this_gen, tokenizer, device)
+            print(f"\nGen {generation:4d} | Best Score: {best_score:.4f}")
+            print(f"Sample: {sample[:200]}")
 
-    return model, tokenizer, device
+        # keep top k survivors
+        survivors = [m for score, m in scored[:top_k]]
+
+        # weighted reproduction so better monkeys have more children
+        top_scores = [score for score, _ in scored[:top_k]]
+        total = sum(top_scores)
+        weights = [s / total for s in top_scores]
+
+        new_population = []
+        # take best monkey directly to next gen unchanged
+        new_population.append(copy.deepcopy(survivors[0]))
+
+        while len(new_population) < population_size:
+            parent = random.choices(survivors, weights=weights, k=1)[0]
+            child = mutate_model(parent, mutation_rate, mutation_strength)
+            new_population.append(child)
+
+        population = new_population
+
+    return best_monkey, best_score_ever
+
 
 if __name__ == '__main__':
-    print("Loading Datasets...")
+    from utils.load_datasets import load_old_english_dataset
+    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    print("Training base monkey...")
     train_ds = load_old_english_dataset(0, 0, seed=13625442)
+    full_corpus = '\t'.join(train_ds)
+    base_model, tokenizer, device = train_monkey(full_corpus, epochs=1000, batch_size=32, block_size=128)
 
-    full_corpus = EOS_TOKEN.join(train_ds) 
-
-    print(f"Training Started...")
-    model, tokenizer, device = train_monkey(full_corpus, epochs=1000, batch_size=32, block_size=128)
-
-    model.eval() # Switch to evaluation mode (turns off dropout)
+    print("Loading judge...")
+    judge_base = torch.load("transformer_judge.pt")
+    judge = TransformerJudge(judge_base)
+    judge = judge.to(device)
     
-    
-    prompts = ["To be, or not to be", "The", "Romeo, where for out thou Romeo", "My familys blacksmith ", "Today I "]
-    with torch.no_grad():
-        for prompt in prompts:
-            print(f"\nPrompt: '{prompt}'")
-        
-            context = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long, device=device)
-            
-                
-            generated_indices = model.generate(context, max_new_tokens=150)
-            output_text = tokenizer.decode(generated_indices[0].tolist())
-            print(f"Generated: {output_text}")
+    print("Evolving...")
+    best_monkey, best_score = evolve(
+        base_model=base_model,
+        judge=judge,
+        tokenizer=tokenizer,
+        device=device,
+        population_size=20,
+        max_generations=50,
+        top_k=5,
+    )
+
+    torch.save(best_monkey, "best_monkey.pt")
+    print(f"\nBest score achieved: {best_score:.4f}")
+    print("Final sample:")
+    print(generate_sample(best_monkey, tokenizer, device, max_new_tokens=500))
