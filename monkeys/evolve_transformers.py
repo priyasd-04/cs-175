@@ -6,15 +6,32 @@ from monkeys.TransformerMonkey import TransformerMonkey, train_monkey
 from classifier.transformer_judge import TransformerJudge
 from utils.load_datasets import load_old_english_dataset
 
-def mutate_model(model, mutation_rate=0.01, mutation_strength=0.05):
-    """Copy a model and change its weights slightly."""
+def _lm_head_params(model):
+    if not hasattr(model, "lm_head"):
+        raise AttributeError("Model has no lm_head. Expected a TransformerMonkey-like model.")
+    return list(model.lm_head.parameters())
+
+
+def mutate_model(model, mutation_rate=0.3, mutation_strength=0.05):
+    """Copy a model and mutate ONLY the lm_head weights (not the full network)."""
     child = copy.deepcopy(model)
     with torch.no_grad():
-        for param in child.parameters():
+        for param in _lm_head_params(child):
             if random.random() < mutation_rate:
                 # Add gaussian noise scaled by mutation_strength
                 noise = torch.randn_like(param) * mutation_strength
                 param.add_(noise)
+    return child
+
+
+def crossover_lm_head(parent_a, parent_b, *, p_swap=0.5):
+    """Create a child by mixing lm_head weights from two parents."""
+    child = copy.deepcopy(parent_a)
+    with torch.no_grad():
+        for pa, pb, pc in zip(_lm_head_params(parent_a), _lm_head_params(parent_b), _lm_head_params(child)):
+            # element-wise mask: choose from parent_b with probability p_swap
+            mask = torch.rand_like(pc, dtype=torch.float32) < float(p_swap)
+            pc.copy_(torch.where(mask, pb, pa))
     return child
 
 def generate_sample(model, tokenizer, device, prompt=None, max_new_tokens=200):
@@ -55,12 +72,13 @@ def evolve(
     population_size=20,
     max_generations=50,
     top_k=5,           # how many survive each generation
-    mutation_rate=0.3, # probability that any given parameter tensor gets mutated
+    mutation_rate=0.3, # probability that any lm_head parameter tensor gets mutated
     mutation_strength=0.05, # how large the weight perturbations are
+    crossover_rate=0.7, # probability we crossover (else clone+mutate)
+    crossover_swap_p=0.5, # element-wise probability to take weights from parent_b
 ):
-    # seed population from base model with initial mutations
-    population = [mutate_model(base_model, mutation_rate, mutation_strength) 
-                  for _ in range(population_size)]
+    # Seed population from base model with initial lm_head mutations.
+    population = [mutate_model(base_model, mutation_rate, mutation_strength) for _ in range(population_size)]
 
     best_monkey = None
     best_score_ever = -1
@@ -98,8 +116,14 @@ def evolve(
         new_population.append(copy.deepcopy(survivors[0]))
 
         while len(new_population) < population_size:
-            parent = random.choices(survivors, weights=weights, k=1)[0]
-            child = mutate_model(parent, mutation_rate, mutation_strength)
+            if random.random() < crossover_rate and len(survivors) >= 2:
+                parent_a, parent_b = random.choices(survivors, weights=weights, k=2)
+                child = crossover_lm_head(parent_a, parent_b, p_swap=crossover_swap_p)
+            else:
+                parent = random.choices(survivors, weights=weights, k=1)[0]
+                child = copy.deepcopy(parent)
+
+            child = mutate_model(child, mutation_rate, mutation_strength)
             new_population.append(child)
 
         population = new_population

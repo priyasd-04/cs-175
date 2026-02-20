@@ -1,78 +1,75 @@
+from __future__ import annotations
+
 import torch
 import torch.nn as nn
-from monkeys.transformer_monkey import TransformerMonkey, CharTokenizer
-from utils.load_datasets import load_old_english_dataset, load_shakespeare_dataset
 
 
 class TransformerJudge(nn.Module):
-    def __init__(self, base_model):
+    """Binary classifier on top of a frozen TransformerMonkey.
+
+    The base transformer is treated as a feature extractor; we attach a small
+    MLP head that predicts Shakespeare-likeliness in [0, 1].
+    """
+
+    def __init__(self, base_model: nn.Module):
         super().__init__()
         self.transformer = base_model
-        # freeze base model weights to prevent them from being updated during training
+        # Freeze base model weights.
         for param in self.transformer.parameters():
             param.requires_grad = False
+
+        # Ensure deterministic base representations (disable dropout, etc.).
+        self.transformer.eval()
+
         self.classifier = nn.Sequential(
-            nn.Linear(base_model.lm_head.in_features, 128), #input layer
-            nn.ReLU(), # activation function
-            nn.Dropout(0.3), # drop out to prevent overfitting
-            nn.Linear(128, 1) # output, gives likelihood of being Shakespeare
+            nn.Linear(base_model.lm_head.in_features, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(128, 1),  # logits
         )
-        
-    def generate_noise(self, monkey_model, tokenizer, device, n_samples=500):
-        noise_texts = []
-        monkey_model.eval()
-        with torch.no_grad():
-            for _ in range(n_samples):
-                seed = torch.zeros((1, 1), dtype=torch.long, device=device) # start with single token
-                generated = monkey_model.generate(seed, max_new_tokens=200) # generate up to 200 tokens
-                text = tokenizer.decode(generated[0].tolist())
-                noise_texts.append(text)
-                
-        return noise_texts
-    def forward(self, idx):
-        # use transformer to get token embeddings
+
+    def forward(
+        self,
+        idx: torch.Tensor,
+        *,
+        lengths: torch.Tensor | None = None,
+        pad_id: int = 0,
+    ) -> torch.Tensor:
+        """Return Shakespeare-likeliness for each sequence.
+
+        Args:
+            idx: LongTensor of shape (B, T) with token ids.
+            lengths: Optional LongTensor of shape (B,) giving the number of
+                non-padding tokens per row. If provided, we take the hidden
+                state at lengths-1. If omitted, we use the last position (T-1).
+            pad_id: Token id used for padding (only relevant when lengths is provided).
+        """
         with torch.no_grad():
             token_embeddings = self.transformer.token_embedding_table(idx)
             pos_embeddings = self.transformer.position_embedding_table(torch.arange(idx.shape[1], device=idx.device))
             x = token_embeddings + pos_embeddings
-            
-            # create mask for prior inputs
-            mask = nn.Transformer.generate_square_subsequent_mask(idx.shape[1]).to(idx.device)
-            x = self.transformer.blocks(x, mask=mask, is_causal=True)
-            x = self.transformer.ln_f(x)
-            
-        # Take final token representation for classification
-        last_hidden = x[:, -1, :] 
-        
-        # pass thru classifier to get logits
-        logits = self.classifier(last_hidden)
-        
-        # sigmoid function to convert logits --> probability
-        return torch.sigmoid(logits) 
-    
-    
-def train_transformer_judge(judge_model, tokenizer, device, epochs=5):
-    sp_train, sp_test = load_shakespeare_dataset(0.0, 0.2)
-    
-    noise_texts = judge_model.generate_noise(monkey_model=TransformerMonkey(tokenizer.vocab_size).to(device), tokenizer=tokenizer, device=device, n_samples=500)
 
-    texts = sp_train + sp_test + noise_texts # combine shakespeare + noise for training
-    
-    labels = torch.cat([
-        torch.ones(len(sp_train)),
-        torch.zeros(len(noise_texts))
-    ])
-    
-    # Optimizer and loss function
-    optimizer = torch.optim.Adam(judge_model.parameters(), lr=1e-3)
-    loss_fn = nn.BCELoss()
-    
-    for epoch in range(epochs):
-        for text, label in zip(texts, labels):
-            encode = torch.tensor(tokenizer.encode(text), dtype=torch.long).unsqueeze(0).to(device)
-            output = judge_model(encode)
-            loss = loss_fn(output.squeeze(), label.to(device))
-            
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            # Create causal mask.
+            T = idx.shape[1]
+            # Bool mask: True means "mask out" (do not attend).
+            mask = torch.triu(torch.ones((T, T), device=idx.device, dtype=torch.bool), diagonal=1)
+
+            # Mask padding tokens if lengths were provided.
+            key_padding_mask = None
+            if lengths is not None:
+                key_padding_mask = idx.eq(int(pad_id))
+
+            x = self.transformer.blocks(x, mask=mask, src_key_padding_mask=key_padding_mask, is_causal=True)
+            x = self.transformer.ln_f(x)
+
+        if lengths is None:
+            last_hidden = x[:, -1, :]
+        else:
+            # Clamp lengths to [1, T] and gather the last non-pad hidden state.
+            T = x.shape[1]
+            lengths = torch.clamp(lengths.to(x.device), 1, T)
+            gather_idx = (lengths - 1).view(-1, 1, 1).expand(-1, 1, x.shape[2])
+            last_hidden = x.gather(dim=1, index=gather_idx).squeeze(1)
+
+        logits = self.classifier(last_hidden)
+        return torch.sigmoid(logits)

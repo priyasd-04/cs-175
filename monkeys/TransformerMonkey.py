@@ -3,7 +3,6 @@ import torch.nn as nn
 from torch.nn import functional as F
 import torch.optim as optim
 from utils.load_datasets import load_old_english_dataset
-from torch.utils.tensorboard import SummaryWriter
 
 from pathlib import Path
 import pickle
@@ -187,8 +186,15 @@ def train_monkey(epochs=5000, batch_size=32, block_size=64,
         y = torch.stack([data[i+1:i+block_size+1] for i in ix])
         return x.to(device), y.to(device)
     
-    #initialize writer to document growth on tensorboard
+    # initialize writer to document growth on tensorboard
     if writer:
+        try:
+            from torch.utils.tensorboard import SummaryWriter  # requires `tensorboard`
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                "TensorBoard logging requested (writer=True) but `tensorboard` is not installed. "
+                "Install it with: python3 -m pip install tensorboard"
+            ) from e
         run_name = f"bs_{block_size}emb{n_embd}_head{n_head}_lyr{n_layer}_lr{lr}_do{dropout}"
         writer = SummaryWriter(f"runs/{run_name}")
 
