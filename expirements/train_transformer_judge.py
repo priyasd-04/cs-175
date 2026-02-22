@@ -26,6 +26,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from classifier.transformer_judge import TransformerJudge
 from monkeys.TransformerMonkey import CharTokenizer, TransformerMonkey, EOS_TOKEN
+from monkeys.bigram import BigramModel
 from utils.load_datasets import load_old_english_dataset, load_shakespeare_dataset
 
 
@@ -57,6 +58,14 @@ def _encode_clip(tokenizer: CharTokenizer, text: str, block_size: int) -> list[i
     return ids
 
 
+def _can_encode(tokenizer: CharTokenizer, text: str) -> bool:
+    try:
+        tokenizer.encode(text)
+        return True
+    except KeyError:
+        return False
+
+
 def _random_texts_from_tokenizer(
     tokenizer: CharTokenizer,
     *,
@@ -72,6 +81,44 @@ def _random_texts_from_tokenizer(
     g = torch.Generator().manual_seed(seed)
     idxs = torch.randint(0, len(chars), (n, length), generator=g)
     return ["".join(chars[j] for j in row.tolist()) for row in idxs]
+
+
+def _generate_bigram_negatives(
+    shakespeare_lines: Sequence[str],
+    *,
+    n: int,
+    length: int,
+    seed: int,
+) -> list[str]:
+    """Bigram samples trained on Shakespeare lines (Shakespeare-ish negatives)."""
+    model = BigramModel(smoothing=0.5).fit(shakespeare_lines)
+    return [model.generate(length, seed=seed + i) for i in range(n)]
+
+
+def _generate_transformer_negatives(
+    model: TransformerMonkey,
+    tokenizer: CharTokenizer,
+    *,
+    n: int,
+    prompt: str,
+    max_new_tokens: int,
+    seed: int,
+    device: str,
+) -> list[str]:
+    """Samples from the base transformer model (monkey negatives)."""
+    model.eval()
+    out: list[str] = []
+    with torch.no_grad():
+        for i in range(n):
+            # Add a little randomness by sampling from a shifted prompt slice.
+            p = prompt
+            if len(p) > 10:
+                start = (seed + i) % min(10, len(p) - 1)
+                p = prompt[start:]
+            x = torch.tensor([tokenizer.encode(p)], dtype=torch.long, device=device)
+            y = model.generate(x, max_new_tokens=max_new_tokens, temperature=0.8)
+            out.append(tokenizer.decode(y[0].tolist()))
+    return out
 
 
 class TextLabelDataset(Dataset):
@@ -203,7 +250,14 @@ def main() -> None:
 
     ap.add_argument(
         "--negatives",
-        choices=("oe", "random", "oe+random"),
+        choices=(
+            "oe",
+            "random",
+            "oe+random",
+            "oe+random+bigram",
+            "oe+random+transformer",
+            "oe+random+bigram+transformer",
+        ),
         default="oe+random",
         help="What to use as negative examples (non-Shakespeare)",
     )
@@ -214,6 +268,15 @@ def main() -> None:
         help="How many random-negative samples to add (default: same as #Shakespeare lines used)",
     )
     ap.add_argument("--random-len", type=int, default=200, help="Length of each random-negative string")
+    ap.add_argument(
+        "--n-hard-neg",
+        type=int,
+        default=None,
+        help="How many hard-negative samples to add per source (default: same as #positives)",
+    )
+    ap.add_argument("--hard-len", type=int, default=300, help="Length for bigram hard negatives")
+    ap.add_argument("--hard-prompt", type=str, default="To be, or not to be ", help="Prompt for transformer hard negatives")
+    ap.add_argument("--hard-max-new", type=int, default=200, help="Max new tokens for transformer hard negatives")
 
     ap.add_argument("--out", type=str, default="models/transformer_judge.pt")
     args = ap.parse_args()
@@ -246,7 +309,7 @@ def main() -> None:
     tokenizer = CharTokenizer(_join_lines(oe_lines + sp_lines))
 
     random_negs: list[str] = []
-    if args.negatives in ("random", "oe+random"):
+    if "random" in args.negatives:
         n_rand = int(args.n_random_neg) if args.n_random_neg is not None else len(sp_lines)
         random_negs = _random_texts_from_tokenizer(
             tokenizer, n=n_rand, length=int(args.random_len), seed=args.seed + 999
@@ -290,6 +353,31 @@ def main() -> None:
         neg_texts = list(random_negs)
     else:
         neg_texts = list(oe_lines) + list(random_negs)
+
+    # Hard negatives: monkey outputs that look more Shakespeare-ish than OE/random.
+    n_hard = int(args.n_hard_neg) if args.n_hard_neg is not None else len(sp_lines)
+    hard_texts: list[str] = []
+    if "bigram" in args.negatives:
+        bigram_raw = _generate_bigram_negatives(sp_lines, n=n_hard, length=int(args.hard_len), seed=args.seed + 2026)
+        bigram_ok = [t for t in bigram_raw if _can_encode(tokenizer, t)]
+        hard_texts.extend(bigram_ok)
+        print(f"Added bigram hard negatives: {len(bigram_ok)} (requested {n_hard})")
+    if "transformer" in args.negatives:
+        tr_raw = _generate_transformer_negatives(
+            base_model,
+            tokenizer,
+            n=n_hard,
+            prompt=str(args.hard_prompt),
+            max_new_tokens=int(args.hard_max_new),
+            seed=args.seed + 404,
+            device=device,
+        )
+        tr_ok = [t for t in tr_raw if _can_encode(tokenizer, t)]
+        hard_texts.extend(tr_ok)
+        print(f"Added transformer hard negatives: {len(tr_ok)} (requested {n_hard})")
+
+    if hard_texts:
+        neg_texts.extend(hard_texts)
 
     texts = list(sp_lines) + neg_texts
     labels = [1] * len(sp_lines) + [0] * len(neg_texts)

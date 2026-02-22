@@ -1,10 +1,16 @@
-# evolution.py
 import copy
+import argparse
+from pathlib import Path
+import sys
 import torch
 import random
-from monkeys.TransformerMonkey import TransformerMonkey, train_monkey
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from monkeys.TransformerMonkey import TransformerMonkey
 from classifier.transformer_judge import TransformerJudge
-from utils.load_datasets import load_old_english_dataset
 
 def _lm_head_params(model):
     if not hasattr(model, "lm_head"):
@@ -48,19 +54,20 @@ def generate_sample(model, tokenizer, device, prompt=None, max_new_tokens=200):
     
     return tokenizer.decode(generated[0].tolist())
 
-def score_monkey(model, judge, tokenizer, device, n_samples=3):
-    """
-    Score monkey by averaging judge scores across multiple samples.
-    """
+def score_monkey(model, judge, tokenizer, device, n_samples=3, *, prompt=None, max_new_tokens=200):
+    """Score monkey by averaging judge scores across multiple samples."""
     scores = []
     for _ in range(n_samples):
-        text = generate_sample(model, tokenizer, device)
-        encoded = torch.tensor(
-            [tokenizer.encode(text)], dtype=torch.long, device=device
-        )
-        encoded = encoded[:, -judge.transformer.block_size:]  # clamp to block size
+        text = generate_sample(model, tokenizer, device, prompt=prompt, max_new_tokens=max_new_tokens)
+        ids = tokenizer.encode(text)
+        if not ids:
+            ids = [0]
+        block = int(judge.transformer.block_size)
+        ids = ids[-block:]
+        encoded = torch.tensor([ids], dtype=torch.long, device=device)
+        lengths = torch.tensor([len(ids)], dtype=torch.long, device=device)
         with torch.no_grad():
-            score = judge(encoded).item()
+            score = judge(encoded, lengths=lengths, pad_id=0).item()
         scores.append(score)
     return sum(scores) / len(scores)
 
@@ -72,6 +79,9 @@ def evolve(
     population_size=20,
     max_generations=50,
     top_k=5,           # how many survive each generation
+    score_samples=2,   # how many generated samples to average per monkey
+    prompt=None,       # optional prompt for generation
+    max_new_tokens=200,
     mutation_rate=0.3, # probability that any lm_head parameter tensor gets mutated
     mutation_strength=0.05, # how large the weight perturbations are
     crossover_rate=0.7, # probability we crossover (else clone+mutate)
@@ -86,7 +96,7 @@ def evolve(
     for generation in range(max_generations):
         # score every monkey
         scored = [
-            (score_monkey(m, judge, tokenizer, device), m) 
+            (score_monkey(m, judge, tokenizer, device, n_samples=score_samples, prompt=prompt, max_new_tokens=max_new_tokens), m)
             for m in population
         ]
         scored.sort(key=lambda x: x[0], reverse=True)
@@ -99,7 +109,7 @@ def evolve(
             best_monkey = copy.deepcopy(best_monkey_this_gen)
 
         if generation % 5 == 0:
-            sample = generate_sample(best_monkey_this_gen, tokenizer, device)
+            sample = generate_sample(best_monkey_this_gen, tokenizer, device, prompt=prompt, max_new_tokens=max_new_tokens)
             print(f"\nGen {generation:4d} | Best Score: {best_score:.4f}")
             print(f"Sample: {sample[:200]}")
 
@@ -131,33 +141,78 @@ def evolve(
     return best_monkey, best_score_ever
 
 
-if __name__ == '__main__':
-    from utils.load_datasets import load_old_english_dataset
-    
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+def _load_judge_ckpt(path: str | Path, device: str):
+    """Load the checkpoint created by expirements/train_transformer_judge.py."""
+    path = Path(path)
+    try:
+        ckpt = torch.load(path, map_location=device, weights_only=False)
+    except TypeError:
+        ckpt = torch.load(path, map_location=device)
 
-    print("Training base monkey...")
-    train_ds = load_old_english_dataset(0, 0, seed=13625442)
-    full_corpus = '\t'.join(train_ds)
-    base_model, tokenizer, device = train_monkey(full_corpus, epochs=1000, batch_size=32, block_size=128)
+    tokenizer = ckpt["tokenizer"]
+    cfg = ckpt["base_model_config"]
 
-    print("Loading judge...")
-    judge_base = torch.load("transformer_judge.pt")
-    judge = TransformerJudge(judge_base)
-    judge = judge.to(device)
-    
-    print("Evolving...")
+    base = TransformerMonkey(
+        tokenizer.vocab_size,
+        tokenizer=tokenizer,
+        block_size=int(cfg["block_size"]),
+        n_embd=int(cfg["n_embd"]),
+        n_head=int(cfg["n_head"]),
+        n_layer=int(cfg["n_layer"]),
+        dropout=float(cfg.get("dropout", 0.2)),
+    ).to(device)
+
+    judge = TransformerJudge(base).to(device)
+    judge.load_state_dict(ckpt["judge_state_dict"])
+    judge.eval()
+    return judge, tokenizer
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description="Evolve only lm_head using a fixed transformer judge")
+    ap.add_argument("--judge-ckpt", type=str, default="models/transformer_judge.pt")
+    ap.add_argument("--save-lm-head", type=str, default="models/best_evolved_lm_head.pt")
+    ap.add_argument("--population", type=int, default=20)
+    ap.add_argument("--generations", type=int, default=30)
+    ap.add_argument("--top-k", type=int, default=5)
+    ap.add_argument("--samples-per-score", type=int, default=2)
+    ap.add_argument("--mutation-rate", type=float, default=0.3)
+    ap.add_argument("--mutation-strength", type=float, default=0.05)
+    ap.add_argument("--crossover-rate", type=float, default=0.7)
+    ap.add_argument("--crossover-swap-p", type=float, default=0.5)
+    ap.add_argument("--prompt", type=str, default=None)
+    ap.add_argument("--max-new-tokens", type=int, default=200)
+    args = ap.parse_args()
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Device: {device}")
+
+    judge, tokenizer = _load_judge_ckpt(args.judge_ckpt, device=device)
+    base_model = copy.deepcopy(judge.transformer)
+
     best_monkey, best_score = evolve(
         base_model=base_model,
         judge=judge,
         tokenizer=tokenizer,
         device=device,
-        population_size=20,
-        max_generations=50,
-        top_k=5,
+        population_size=args.population,
+        max_generations=args.generations,
+        top_k=args.top_k,
+        score_samples=args.samples_per_score,
+        prompt=args.prompt,
+        max_new_tokens=args.max_new_tokens,
+        mutation_rate=args.mutation_rate,
+        mutation_strength=args.mutation_strength,
+        crossover_rate=args.crossover_rate,
+        crossover_swap_p=args.crossover_swap_p,
     )
 
-    torch.save(best_monkey, "best_monkey.pt")
     print(f"\nBest score achieved: {best_score:.4f}")
     print("Final sample:")
-    print(generate_sample(best_monkey, tokenizer, device, max_new_tokens=500))
+    print(generate_sample(best_monkey, tokenizer, device, prompt=args.prompt, max_new_tokens=300))
+
+    if args.save_lm_head:
+        save_path = (REPO_ROOT / args.save_lm_head).resolve()
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save({"lm_head": best_monkey.lm_head.state_dict(), "best_score": float(best_score)}, save_path)
+        print(f"Saved evolved lm_head: {save_path}")
