@@ -104,7 +104,7 @@ class TransformerMonkey(nn.Module):
         return logits, loss
     
     def fit(self, train_text, val_text, epochs=5000, batch_size=32, lr=1e-3, 
-            writer=False, model_path=None, run_name="monkey_run"):
+            writer=False, model_path=None, run_name=None):
         
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         print(f"Training on: {device}")
@@ -126,7 +126,8 @@ class TransformerMonkey(nn.Module):
                     "TensorBoard logging requested (writer=True) but `tensorboard` is not installed. "
                     "Install it with: python3 -m pip install tensorboard"
                 ) from e
-            
+            if run_name == None:
+                run_name = "bs_{block_size}emb{n_embd}_head{n_head}_lyr{n_layer}_lr{lr}_do{dropout}"
             writer = SummaryWriter(f"runs/{run_name}")
 
         #track least loss to save the best performing model
@@ -293,7 +294,7 @@ def train_monkey(epochs=5000, batch_size=32, block_size=64,
         optimizer.step()
 
         #document loss on the writer
-        if writer and epoch % 50 == 0:
+        if writer and epoch % 100 == 0:
             training_loss = model.estimate_loss(train_data, batch_size, eval_iters=50)
             validation_loss = model.estimate_loss(val_data, batch_size, eval_iters=50)
 
