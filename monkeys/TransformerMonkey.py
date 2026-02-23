@@ -18,10 +18,19 @@ class CharTokenizer:
         self.stoi = { ch:i for i,ch in enumerate(self.chars) }
         self.itos = { i:ch for i,ch in enumerate(self.chars) }
 
-    def encode(self, s):
-        return [self.stoi[c] for c in s]
+    def encode(self, s, surpress_print = True):
+        encoded_string = []
+        for c in s:
+            try:
+                encoded_string.append(self.stoi[c])
+            except KeyError as e:
+                if (not surpress_print):
+                    print(f"Character: {c} not in tokenizer, replacing with ' '")
+                encoded_string.append(self.stoi[' '])
+
+        return encoded_string
     def decode(self, l):
-        return ''.join([self.itos[i] for i in l])
+        return ''.join([self.itos.get(i, ' ') for i in l])
     
     def saveTokenizer(self, path):
         """Saves the tokenizer, expecting path of structure Path.cwd() / folder / tokenizerName.pkl"""
@@ -93,6 +102,75 @@ class TransformerMonkey(nn.Module):
             loss = F.cross_entropy(logits, targets)
 
         return logits, loss
+    
+    def fit(self, train_text, val_text, epochs=5000, batch_size=32, lr=1e-3, 
+            writer=False, model_path=None, run_name="monkey_run"):
+        
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        print(f"Training on: {device}")
+        
+        optimizer = optim.AdamW(self.parameters(), lr=lr)
+
+        train_text = EOS_TOKEN.join(train_text)
+        val_text = EOS_TOKEN.join(val_text)
+
+        train_data = torch.tensor(self.tokenizer.encode(train_text), dtype=torch.long).to(device)
+        val_data = torch.tensor(self.tokenizer.encode(val_text), dtype=torch.long).to(device)
+        
+        # initialize writer to document growth on tensorboard
+        if writer:
+            try:
+                from torch.utils.tensorboard import SummaryWriter  # requires `tensorboard`
+            except ModuleNotFoundError as e:
+                raise ModuleNotFoundError(
+                    "TensorBoard logging requested (writer=True) but `tensorboard` is not installed. "
+                    "Install it with: python3 -m pip install tensorboard"
+                ) from e
+            
+            writer = SummaryWriter(f"runs/{run_name}")
+
+        #track least loss to save the best performing model
+        min_validation_loss = float('inf')
+
+        #training loop:
+        self.train()
+        for epoch in range(epochs):
+            ix = torch.randint(len(train_data) - self.block_size, (batch_size,))
+            xb = torch.stack([train_data[i:i+self.block_size] for i in ix]).to(device)
+            yb = torch.stack([train_data[i+1:i+self.block_size+1] for i in ix]).to(device)
+
+            # Forward pass
+            logits, loss = self(xb, yb)
+            
+            # Backward pass
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            optimizer.step()
+
+            #document loss on the writer
+            if writer and epoch % 50 == 0:
+                training_loss = self.estimate_loss(train_data, batch_size, eval_iters=50)
+                validation_loss = self.estimate_loss(val_data, batch_size, eval_iters=50)
+
+                #save the best model if it performs well on validation loss
+                if validation_loss < min_validation_loss:
+                    if model_path:
+                        save_dir = Path.cwd() / model_path 
+                        save_dir.mkdir(parents=True, exist_ok=True)
+                        full_file_path = save_dir / f"{run_name}.pt"
+                        self.saveModel(full_file_path)
+                    min_validation_loss = validation_loss
+
+                writer.add_scalars('Loss', {'train': training_loss,'val': validation_loss,}, epoch)
+                
+            if epoch % 500 == 0:
+                print(f"Epoch {epoch}: Loss {loss.item():.4f}")
+
+
+        if writer:
+            writer.close()
+
+
 
     def generate(self, idx, max_new_tokens, stop_token = EOS_TOKEN, temperature = 0.8):
         for _ in range(max_new_tokens):
@@ -268,11 +346,11 @@ if __name__ == '__main__':
             print(f"Generated: {output_text}")
 
     print("Saving Monkey...")
-    path = Path.cwd() / "models" / "SmallTransformerMonkey.pt"
+    path = Path.cwd() / "models" / "SmallTransformerMonkey2.pt"
     model.saveModel(path)
 
-    print("Saving Tokenizer...")
-    path = Path.cwd() / "tokenizers" / "oldEnglishCharTokenizer.pkl"
-    tokenizer.saveTokenizer(path)
+    #print("Saving Tokenizer...")
+    #path = Path.cwd() / "tokenizers" / "oldEnglishCharTokenizer.pkl"
+    #tokenizer.saveTokenizer(path)
 
     print(f"Save Successful! {path}")

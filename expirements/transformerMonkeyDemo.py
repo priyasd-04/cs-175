@@ -3,7 +3,7 @@ from pathlib import Path
 import torch
 
 tokenizer = CharTokenizer.loadTokenizer(Path.cwd() / 'tokenizers' / 'oldEnglishCharTokenizer.pkl')
-model = TransformerMonkey(tokenizer.vocab_size, block_size=128)
+model = TransformerMonkey(tokenizer.vocab_size, tokenizer, block_size=128)
 model.loadModel(Path.cwd() / 'models' / 'SmallTransformerMonkey.pt')
 
 model.eval() # Switch to evaluation mode (turns off dropout)
