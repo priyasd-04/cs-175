@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Sequence
@@ -150,6 +151,12 @@ def collate_batch(batch, *, pad_id: int = 0):
     return x, lengths_t, y
 
 
+def _format_counts(label: str, items: Sequence[str]) -> str:
+    counts = Counter(items)
+    parts = [f"{k}={counts[k]}" for k in sorted(counts)]
+    return f"{label}: " + (", ".join(parts) if parts else "none")
+
+
 @torch.no_grad()
 def evaluate(
     judge: TransformerJudge,
@@ -246,7 +253,8 @@ def main() -> None:
     ap.add_argument("--epochs", type=int, default=5)
     ap.add_argument("--batch-size", type=int, default=64)
     ap.add_argument("--lr", type=float, default=1e-3)
-    ap.add_argument("--val-frac", type=float, default=0.2)
+    ap.add_argument("--val-frac", type=float, default=0.1)
+    ap.add_argument("--test-frac", type=float, default=0.1)
 
     ap.add_argument(
         "--negatives",
@@ -282,6 +290,8 @@ def main() -> None:
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
+    if args.val_frac < 0 or args.test_frac < 0 or (args.val_frac + args.test_frac) >= 1.0:
+        raise ValueError("Need val_frac >= 0, test_frac >= 0, and val_frac + test_frac < 1.")
 
     device = _device()
     print(f"Device: {device}")
@@ -347,20 +357,24 @@ def main() -> None:
 
     print("Preparing judge dataset...")
     neg_texts: list[str] = []
+    neg_sources: list[str] = []
     if args.negatives == "oe":
         neg_texts = list(oe_lines)
+        neg_sources = ["old_english"] * len(oe_lines)
     elif args.negatives == "random":
         neg_texts = list(random_negs)
+        neg_sources = ["random"] * len(random_negs)
     else:
         neg_texts = list(oe_lines) + list(random_negs)
+        neg_sources = (["old_english"] * len(oe_lines)) + (["random"] * len(random_negs))
 
     # Hard negatives: monkey outputs that look more Shakespeare-ish than OE/random.
     n_hard = int(args.n_hard_neg) if args.n_hard_neg is not None else len(sp_lines)
-    hard_texts: list[str] = []
     if "bigram" in args.negatives:
         bigram_raw = _generate_bigram_negatives(sp_lines, n=n_hard, length=int(args.hard_len), seed=args.seed + 2026)
         bigram_ok = [t for t in bigram_raw if _can_encode(tokenizer, t)]
-        hard_texts.extend(bigram_ok)
+        neg_texts.extend(bigram_ok)
+        neg_sources.extend(["bigram_hard"] * len(bigram_ok))
         print(f"Added bigram hard negatives: {len(bigram_ok)} (requested {n_hard})")
     if "transformer" in args.negatives:
         tr_raw = _generate_transformer_negatives(
@@ -373,14 +387,14 @@ def main() -> None:
             device=device,
         )
         tr_ok = [t for t in tr_raw if _can_encode(tokenizer, t)]
-        hard_texts.extend(tr_ok)
+        neg_texts.extend(tr_ok)
+        neg_sources.extend(["transformer_hard"] * len(tr_ok))
         print(f"Added transformer hard negatives: {len(tr_ok)} (requested {n_hard})")
-
-    if hard_texts:
-        neg_texts.extend(hard_texts)
 
     texts = list(sp_lines) + neg_texts
     labels = [1] * len(sp_lines) + [0] * len(neg_texts)
+    sources = (["shakespeare"] * len(sp_lines)) + neg_sources
+    print(_format_counts("Dataset composition before balancing", sources))
 
     g_bal = torch.Generator().manual_seed(args.seed + 1234)
     pos_idx = [i for i, y in enumerate(labels) if y == 1]
@@ -392,19 +406,37 @@ def main() -> None:
     keep.sort()
     texts = [texts[i] for i in keep]
     labels = [labels[i] for i in keep]
+    sources = [sources[i] for i in keep]
     print(f"Balanced binary dataset: pos={n_bin} neg={n_bin} (total={len(texts)})")
+    print(_format_counts("Dataset composition after balancing", sources))
 
     g = torch.Generator().manual_seed(args.seed)
     perm = torch.randperm(len(texts), generator=g).tolist()
     texts = [texts[i] for i in perm]
     labels = [labels[i] for i in perm]
+    sources = [sources[i] for i in perm]
 
-    n_val = int(len(texts) * float(args.val_frac))
-    val_texts, train_texts = texts[:n_val], texts[n_val:]
-    val_labels, train_labels = labels[:n_val], labels[n_val:]
+    n_total = len(texts)
+    n_test = int(n_total * float(args.test_frac))
+    n_val = int(n_total * float(args.val_frac))
+    test_end = n_test
+    val_end = n_test + n_val
+
+    test_texts, val_texts, train_texts = texts[:test_end], texts[test_end:val_end], texts[val_end:]
+    test_labels, val_labels, train_labels = labels[:test_end], labels[test_end:val_end], labels[val_end:]
+    test_sources, val_sources, train_sources = sources[:test_end], sources[test_end:val_end], sources[val_end:]
+
+    print(
+        f"Split sizes | train={len(train_texts)} val={len(val_texts)} test={len(test_texts)} "
+        f"(val_frac={args.val_frac:.2f}, test_frac={args.test_frac:.2f})"
+    )
+    print(_format_counts("Train composition", train_sources))
+    print(_format_counts("Val composition", val_sources))
+    print(_format_counts("Test composition", test_sources))
 
     train_ds = TextLabelDataset(train_texts, train_labels, tokenizer=tokenizer, block_size=base_cfg.block_size)
     val_ds = TextLabelDataset(val_texts, val_labels, tokenizer=tokenizer, block_size=base_cfg.block_size)
+    test_ds = TextLabelDataset(test_texts, test_labels, tokenizer=tokenizer, block_size=base_cfg.block_size)
 
     train_loader = DataLoader(
         train_ds,
@@ -418,11 +450,19 @@ def main() -> None:
         shuffle=False,
         collate_fn=lambda b: collate_batch(b, pad_id=0),
     )
+    test_loader = DataLoader(
+        test_ds,
+        batch_size=args.batch_size,
+        shuffle=False,
+        collate_fn=lambda b: collate_batch(b, pad_id=0),
+    )
 
     judge = TransformerJudge(base_model).to(device)
 
     optimizer = torch.optim.Adam(judge.classifier.parameters(), lr=args.lr)
     loss_fn = nn.BCELoss()
+    best_state = None
+    best_val_f1 = float("-inf")
 
     print("Training judge head...")
     for epoch in range(args.epochs):
@@ -443,6 +483,22 @@ def main() -> None:
             f"epoch {epoch+1}/{args.epochs} | "
             f"val loss={metrics['loss']:.4f} acc={metrics['accuracy']:.3f} f1={metrics['f1']:.3f}"
         )
+        if metrics["f1"] > best_val_f1:
+            best_val_f1 = metrics["f1"]
+            best_state = {k: v.detach().cpu().clone() for k, v in judge.state_dict().items()}
+
+    if best_state is not None:
+        judge.load_state_dict(best_state)
+
+    test_metrics = evaluate(judge, test_loader, device=device, pad_id=0)
+    print(
+        "\nFinal test metrics | "
+        f"loss={test_metrics['loss']:.4f} "
+        f"acc={test_metrics['accuracy']:.3f} "
+        f"precision={test_metrics['precision']:.3f} "
+        f"recall={test_metrics['recall']:.3f} "
+        f"f1={test_metrics['f1']:.3f}"
+    )
 
     out_path = (REPO_ROOT / args.out).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
