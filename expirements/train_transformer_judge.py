@@ -334,11 +334,11 @@ def main() -> None:
         dropout=base_cfg.dropout,
     ).to(device)
 
-    print("Pretraining base LM on Old English (quick)...")
+    print("Pretraining base LM on Shakespear...")
     pretrain_base_lm(
         base_model,
         tokenizer,
-        train_text=_join_lines(oe_lines),
+        train_text=_join_lines(sp_lines),
         device=device,
         steps=args.base_pretrain_steps,
         batch_size=args.base_pretrain_batch,
