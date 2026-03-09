@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from statistics import mean
 
+import matplotlib.pyplot as plt
 import torch
 
 
@@ -31,6 +32,53 @@ def _summarize(scores: list[float]) -> tuple[float, float]:
     if not scores:
         return float("nan"), float("nan")
     return float(mean(scores)), float(max(scores))
+
+
+def _plot_score_hist(
+    scores_by_source: dict[str, list[float]],
+    *,
+    title: str,
+    out_path: Path,
+) -> None:
+    order = ("real_sp", "real_oe", "random", "bigram", "transformer")
+    labels = {
+        "real_sp": "Shakespeare (real)",
+        "real_oe": "Old English (real)",
+        "random": "Random noise",
+        "bigram": "Bigram (generated)",
+        "transformer": "Transformer (generated)",
+    }
+    colors = {
+        "real_sp": "#2ca02c",
+        "real_oe": "#1f77b4",
+        "random": "#d62728",
+        "bigram": "#ff7f0e",
+        "transformer": "#9467bd",
+    }
+
+    plt.figure(figsize=(10, 6))
+    for key in order:
+        vals = scores_by_source.get(key, [])
+        if not vals:
+            continue
+        plt.hist(
+            vals,
+            bins=20,
+            alpha=0.45,
+            density=True,
+            label=f"{labels[key]} (n={len(vals)})",
+            color=colors[key],
+            range=(0.0, 1.0),
+        )
+    plt.xlim(0.0, 1.0)
+    plt.xlabel("Shakespeare-likeness score")
+    plt.ylabel("Density")
+    plt.title(title)
+    plt.legend()
+    plt.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_path, dpi=180)
+    plt.close()
 
 
 def _score_transformer_judge(
@@ -90,6 +138,7 @@ def main() -> None:
     ap.add_argument("--judge-ckpt", type=str, default="models/transformer_judge.pt")
     ap.add_argument("--transformer-prompt", type=str, default="To be, or not to be ")
     ap.add_argument("--transformer-new", type=int, default=200)
+    ap.add_argument("--out-dir", type=str, default="results")
     args = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -196,6 +245,24 @@ def main() -> None:
         tfidf_str = f"{a_mean:.3f} / {a_max:.3f}" if tfidf_scores[src] else "n/a"
         tr_str = f"{b_mean:.3f} / {b_max:.3f}" if tr_scores[src] else "n/a"
         print(f"{src:<12} | {tfidf_str:>18} | {tr_str:>18}")
+
+    out_dir = (REPO_ROOT / args.out_dir).resolve()
+    tfidf_plot = out_dir / "tfidf_judge_score_hist.png"
+    _plot_score_hist(
+        tfidf_scores,
+        title="TF-IDF Judge: Score Distribution by Source",
+        out_path=tfidf_plot,
+    )
+    print(f"Saved histogram: {tfidf_plot}")
+
+    if transformer_judge is not None and transformer_tokenizer is not None:
+        tr_plot = out_dir / "transformer_judge_score_hist.png"
+        _plot_score_hist(
+            tr_scores,
+            title="Transformer Judge: Score Distribution by Source",
+            out_path=tr_plot,
+        )
+        print(f"Saved histogram: {tr_plot}")
 
 
 if __name__ == "__main__":
