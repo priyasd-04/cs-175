@@ -150,8 +150,8 @@ class TransformerMonkey(nn.Module):
 
             #document loss on the writer
             if writer and epoch % 50 == 0:
-                training_loss = self.estimate_loss(train_data, batch_size, eval_iters=50)
-                validation_loss = self.estimate_loss(val_data, batch_size, eval_iters=50)
+                training_loss = self.estimate_loss(train_data, batch_size, eval_iters=5)
+                validation_loss = self.estimate_loss(val_data, batch_size, eval_iters=5)
 
                 #save the best model if it performs well on validation loss
                 if validation_loss < min_validation_loss:

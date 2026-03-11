@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from copy import deepcopy
+import math
 
 from monkeys.TransformerMonkey import TransformerMonkey
 
@@ -23,12 +24,14 @@ class LoRALinear(nn.Module):
         
         # normal for layer A, 0 for layer B is standard, as described in:
         #https://apxml.com/courses/lora-peft-efficient-llm-training/chapter-4-advanced-lora-variants/lora-initialization-strategies 
-        nn.init.normal_(self.lora_A) 
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B)
 
     def forward(self, x):
         # Original frozen path + LoRA bypass path
-        return self.original_layer(x) + (x @ self.lora_A @ self.lora_B) * self.scaling
+        lora_path = (x @ self.lora_A) @ self.lora_B
+        return self.original_layer(x) + (lora_path * self.scaling)
+
     
     @property
     def weight(self):
@@ -57,8 +60,12 @@ class LoRAMonkey(TransformerMonkey):
                 
                 block.self_attn.out_proj = LoRALinear(block.self_attn.out_proj, rank, alpha)
 
-            # add LoRA to the lm_head, lowkey just for funsies 
-            self.lm_head = LoRALinear(self.lm_head, rank, alpha)
+            # unfreeze lm_head for more learning
+            if isinstance(self.lm_head, LoRALinear):
+                self.lm_head = self.lm_head.original_layer
+                
+            for param in self.lm_head.parameters():
+                param.requires_grad = True
 
 
 
