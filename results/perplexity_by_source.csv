@@ -1,0 +1,6 @@
+source,n,mean_ppl,min_ppl,max_ppl
+real_sp,40,7.41,6.8,8.38
+real_oe,40,8.62,7.17,9.59
+random,40,1532.38,797.48,2355.1
+bigram,40,25.14,18.86,33.78
+transformer,40,10.35,8.5,12.2

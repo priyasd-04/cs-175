@@ -286,6 +286,8 @@ def main() -> None:
     ap.add_argument("--hard-prompt", type=str, default="To be, or not to be ", help="Prompt for transformer hard negatives")
     ap.add_argument("--hard-max-new", type=int, default=200, help="Max new tokens for transformer hard negatives")
 
+    ap.add_argument("--pretrain-data", choices=("oe", "shakespeare"), default="oe",
+                    help="Which dataset to pretrain the base LM on before judge training")
     ap.add_argument("--out", type=str, default="models/transformer_judge.pt")
     args = ap.parse_args()
 
@@ -344,11 +346,16 @@ def main() -> None:
         dropout=base_cfg.dropout,
     ).to(device)
 
-    print("Pretraining base LM on Old English (quick)...")
+    if args.pretrain_data == "shakespeare":
+        pretrain_text = _join_lines(sp_lines)
+        print("Pretraining base LM on Shakespeare (quick)...")
+    else:
+        pretrain_text = _join_lines(oe_lines)
+        print("Pretraining base LM on Old English (quick)...")
     pretrain_base_lm(
         base_model,
         tokenizer,
-        train_text=_join_lines(oe_lines),
+        train_text=pretrain_text,
         device=device,
         steps=args.base_pretrain_steps,
         batch_size=args.base_pretrain_batch,

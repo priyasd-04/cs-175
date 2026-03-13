@@ -1,0 +1,9 @@
+pretrain_data,negatives,composition,accuracy,precision,recall,f1,loss
+oe,oe,"old_english=521, shakespeare=521",0.808,0.769,0.833,0.800,0.5789
+oe,oe+random,"old_english=250, random=271, shakespeare=521",0.808,0.706,1.000,0.828,0.4618
+oe,oe+random+bigram,"bigram_hard=167, old_english=183, random=171, shakespeare=521",0.865,0.783,0.979,0.870,0.3907
+oe,oe+random+bigram+transformer,"bigram_hard=136, old_english=119, random=149, shakespeare=521, transformer_hard=117",0.865,0.783,0.979,0.870,0.3450
+shakespeare,oe,"old_english=521, shakespeare=521",0.981,1.000,0.958,0.979,0.2661
+shakespeare,oe+random,"old_english=250, random=271, shakespeare=521",0.808,0.706,1.000,0.828,0.3179
+shakespeare,oe+random+bigram,"bigram_hard=167, old_english=183, random=171, shakespeare=521",0.865,0.783,0.979,0.870,0.4450
+shakespeare,oe+random+bigram+transformer,"bigram_hard=136, old_english=119, random=149, shakespeare=521, transformer_hard=117",0.875,0.797,0.979,0.879,0.4030
