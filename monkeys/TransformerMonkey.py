@@ -1,3 +1,6 @@
+# Authors: Davin Makris
+# TransformerMonkey architecture is used as the basis of our Transformer Judge and LoRA monkeys. 
+
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -77,6 +80,11 @@ class TransformerMonkey(nn.Module):
         #Linear maps the embedings back to vocab words
         self.lm_head = nn.Linear(n_embd, vocab_size)
 
+        #store parameters for later reference:
+        self.n_embd = n_embd
+        self.n_layer = n_layer
+        self.n_head = n_head
+
     def forward(self, idx, targets=None):
         B, T = idx.shape #Batch, Time -> The amount of sentences, the width of the context window
 
@@ -127,7 +135,7 @@ class TransformerMonkey(nn.Module):
                     "Install it with: python3 -m pip install tensorboard"
                 ) from e
             if run_name == None:
-                run_name = "bs_{block_size}emb{n_embd}_head{n_head}_lyr{n_layer}_lr{lr}_do{dropout}"
+                run_name = f"bs_{self.block_size}emb{self.n_embd}_head{self.n_head}_lyr{self.n_layer}_lr{lr}_do{self.dropout}"
             writer = SummaryWriter(f"runs/{run_name}")
 
         #track least loss to save the best performing model

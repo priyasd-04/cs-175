@@ -1,7 +1,7 @@
 from torch import tensor
 import matplotlib.pyplot as plt
 
-results = {10: (0.3174882580836614, tensor(2.1763)), 25: (0.3737682778210867, tensor(2.1835)), 50: (0.3410178933824812, tensor(2.1748)), 75: (0.392479528983434, tensor(2.1820)), 100: (0.3555063786251204, tensor(2.1831))}
+results = {0: (0.27323578262612935, tensor(2.436802625656128)), 10: (0.3174882580836614, tensor(2.1763)), 25: (0.3737682778210867, tensor(2.1835)), 50: (0.3410178933824812, tensor(2.1748)), 75: (0.392479528983434, tensor(2.1820)), 100: (0.3555063786251204, tensor(2.1831))}
 
 x = sorted([key for key in results.keys()])
 shakespeare_likeliness = [results[key][0] for key in x]

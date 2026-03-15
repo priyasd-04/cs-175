@@ -1,3 +1,6 @@
+# Authors: Davin Makris
+# Initial draft of transformerMonkey architecture, lacking some features.
+
 import torch
 import torch.nn as nn
 from torch.nn import functional as F

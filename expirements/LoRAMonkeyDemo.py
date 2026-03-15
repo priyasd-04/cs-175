@@ -14,7 +14,10 @@ model = TransformerMonkey(tokenizer.vocab_size, tokenizer,block_size=256,
     n_layer=12,
     dropout=0.4)
 
+
 model.loadModel(Path.cwd() / 'models' / 'experiments1' / 'bs_256emb128_head16_lyr12_lr0.001_do0.4.pt')
+
+print(model.tokenizer.vocab_size)
 
 print("loading data...")
 train_data, val_data, test_data = load_shakespeare_dataset()

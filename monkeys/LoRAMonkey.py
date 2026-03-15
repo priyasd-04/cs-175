@@ -1,3 +1,6 @@
+# Authors: Davin Makris
+# LoRA architecture used to finetune models from old english -> Shakespeare.
+
 import torch
 import torch.nn as nn
 from copy import deepcopy
@@ -24,7 +27,7 @@ class LoRALinear(nn.Module):
         
         # normal for layer A, 0 for layer B is standard, as described in:
         #https://apxml.com/courses/lora-peft-efficient-llm-training/chapter-4-advanced-lora-variants/lora-initialization-strategies 
-        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5)) # we later found kaiming to perform better
         nn.init.zeros_(self.lora_B)
 
     def forward(self, x):
@@ -59,14 +62,5 @@ class LoRAMonkey(TransformerMonkey):
                 block.linear2 = LoRALinear(block.linear2, rank, alpha)
                 
                 block.self_attn.out_proj = LoRALinear(block.self_attn.out_proj, rank, alpha)
-
-            # unfreeze lm_head for more learning
-            if isinstance(self.lm_head, LoRALinear):
-                self.lm_head = self.lm_head.original_layer
-                
-            for param in self.lm_head.parameters():
-                param.requires_grad = True
-
-
 
     
