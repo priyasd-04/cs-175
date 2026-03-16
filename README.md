@@ -47,6 +47,5 @@ cs-175/
 
 - ```src/classifier/```: Contains the TransformerJudge used to evaluate generated text
 - ```src/monkeys```: Contains the model architectures used for text generation: TransformerMonkey, LoRAMonkey, BigramModel
--```src/models/```: Pretrained checkpoints for each model
-
--```expirements/```: Scripts used to produce processed results and different approaches in pushing model output to style transfer.
+- ```src/models/```: Pretrained checkpoints for each model
+- ```expirements/```: Scripts used to produce processed results and different approaches in pushing model output to style transfer.
