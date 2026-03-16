@@ -26,9 +26,9 @@ REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from classifier.judge import Noise_Shakespeare_Classifier
-from utils.load_datasets import load_old_english_dataset, load_shakespeare_dataset
-from monkeys.bigram import BigramModel
+from src.classifier.judge import Noise_Shakespeare_Classifier
+from src.utils.load_datasets import load_old_english_dataset, load_shakespeare_dataset
+from src.monkeys.bigram import BigramModel
 
 
 NOISE_FILE = "noise_dataset/noise.txt"

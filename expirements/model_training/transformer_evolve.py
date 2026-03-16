@@ -3,11 +3,11 @@
 import random
 import torch
 
-from classifier.judge import Noise_Shakespeare_Classifier
-from monkeys.evolution import evolve, mutate
-from monkeys.transformer_monkey import train_monkey
+from src.classifier.judge import Noise_Shakespeare_Classifier
+from src.monkeys.evolution import evolve, mutate
+from src.monkeys.transformer_monkey import train_monkey
 
-from utils.load_datasets import load_old_english_dataset
+from src.utils.load_datasets import load_old_english_dataset
 
 print("Initializing Judge...")
 judge = Noise_Shakespeare_Classifier()

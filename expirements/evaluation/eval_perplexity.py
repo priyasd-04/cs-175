@@ -26,11 +26,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from classifier.transformer_judge import TransformerJudge
-from monkeys.bigram import BigramModel
-from monkeys.generator import random_monkey
-from monkeys.TransformerMonkey import CharTokenizer, EOS_TOKEN, TransformerMonkey
-from utils.load_datasets import load_old_english_dataset, load_shakespeare_dataset
+from src.classifier.transformer_judge import TransformerJudge
+from src.monkeys.bigram import BigramModel
+from src.monkeys.generator import random_monkey
+from src.monkeys.TransformerMonkey import CharTokenizer, EOS_TOKEN, TransformerMonkey
+from src.utils.load_datasets import load_old_english_dataset, load_shakespeare_dataset
 
 
 def _device() -> str:

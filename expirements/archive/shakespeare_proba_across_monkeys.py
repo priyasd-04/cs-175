@@ -12,12 +12,12 @@ REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-import classifier.judge
-from monkeys.evolution import *
+import src.classifier.judge
+from src.monkeys.evolution import *
 
 target = "So is it in the music of men's lives. And here have I the daintiness of ear"
 
-sj = classifier.judge.Noise_Shakespeare_Classifier()
+sj = src.classifier.judge.Noise_Shakespeare_Classifier()
 sj.train("noise_dataset/noise.txt")
 
 def evolve2(target, population_size=200, max_generations=1000, mutation_rate=0.02):

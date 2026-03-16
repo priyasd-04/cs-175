@@ -25,10 +25,10 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-from classifier.transformer_judge import TransformerJudge
-from monkeys.TransformerMonkey import CharTokenizer, TransformerMonkey, EOS_TOKEN
-from monkeys.bigram import BigramModel
-from utils.load_datasets import load_old_english_dataset, load_shakespeare_dataset
+from src.classifier.transformer_judge import TransformerJudge
+from src.monkeys.TransformerMonkey import CharTokenizer, TransformerMonkey, EOS_TOKEN
+from src.monkeys.bigram import BigramModel
+from src.utils.load_datasets import load_old_english_dataset, load_shakespeare_dataset
 
 
 @dataclass(frozen=True)

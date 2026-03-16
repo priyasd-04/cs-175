@@ -1,10 +1,10 @@
-from monkeys.TransformerMonkey import TransformerMonkey, CharTokenizer
-from monkeys.LoRAMonkey import LoRAMonkey
+from src.monkeys.TransformerMonkey import TransformerMonkey, CharTokenizer
+from src.monkeys.LoRAMonkey import LoRAMonkey
 from pathlib import Path
 import torch
-from utils.load_datasets import load_shakespeare_dataset
+from src.utils.load_datasets import load_shakespeare_dataset
 from random import randint
-from classifier.transformer_judge import TransformerJudge
+from src.classifier.transformer_judge import TransformerJudge
 
 print("loading models...")
 tokenizer = CharTokenizer.loadTokenizer(Path.cwd() / 'tokenizers' / 'oldEnglishCharTokenizer.pkl')

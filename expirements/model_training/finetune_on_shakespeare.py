@@ -24,9 +24,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from classifier.transformer_judge import TransformerJudge
-from monkeys.TransformerMonkey import EOS_TOKEN, TransformerMonkey
-from utils.load_datasets import load_shakespeare_dataset
+from src.classifier.transformer_judge import TransformerJudge
+from src.monkeys.TransformerMonkey import EOS_TOKEN, TransformerMonkey
+from src.utils.load_datasets import load_shakespeare_dataset
 
 
 def _load_judge_ckpt(path: str | Path, device: str):

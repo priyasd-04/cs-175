@@ -19,12 +19,12 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 
-from classifier.judge import Noise_Shakespeare_Classifier
-from classifier.transformer_judge import TransformerJudge
-from monkeys.TransformerMonkey import TransformerMonkey, CharTokenizer
-from monkeys.bigram import BigramModel
-from monkeys.generator import random_monkey
-from utils.load_datasets import load_old_english_dataset, load_shakespeare_dataset
+from src.classifier.judge import Noise_Shakespeare_Classifier
+from src.classifier.transformer_judge import TransformerJudge
+from src.monkeys.TransformerMonkey import TransformerMonkey, CharTokenizer
+from src.monkeys.bigram import BigramModel
+from src.monkeys.generator import random_monkey
+from src.utils.load_datasets import load_old_english_dataset, load_shakespeare_dataset
 
 # ── config ────────────────────────────────────────────────────────────────────
 JUDGE_CKPT   = "models/transformer_judge.pt"

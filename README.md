@@ -1,22 +1,50 @@
 # cs-175
 
-Compare **random monkeys** vs a **bigram-trained monkey** (trained on Shakespeare) and score both with the current judge:
+Team Name: Gradient Ascent
+Team Members: Priya Deshmukh, Davin Makris, Amish Kunal
 
-```bash
-python3 expirements/compare_bigram_vs_random.py
-# or:
-python3 -m expirements.compare_bigram_vs_random
-```
+This repository contains the code, models, and results for our CS 175 final project. The focus of this project is on evaluating different langauge models and techniques for generating Shakespeare-like text using various methods to evaluate which will attain style transfer.
 
-Run the **Old English start → Shakespeare push** experiment (bigram updates guided by the judge):
+# Repository Structure
+cs-175/
+├── src/                  # contains main code and modules
+│   ├── classifier/       # judge classifier model
+│   ├── monkeys/          # generator model architectures (TransformerMonkey, LoRAMonkey, Bigram)
+│   ├── models/           # saved model checkpoints (.pt files)
+│   ├── tokenizers/       # tokenizers 
+│   └── utils/            # data loading / preprocessing
+│
+├── experiments/          # expiremental scripts 
+│
+├── notebooks/            # final report notebook
+│   └── final_report.ipynb
+│
+├── data/                 # generated dataset
+│   └── noise_dataset/
+│
+├── results/              # generated figures and qaulitative metrics from expirements
+│
+├── README.md
+├── requirements.txt
+└── .gitignore
 
-```bash
-# Top-K updates (baseline)
-python3 expirements/old_english_start_bigram_push.py --mode topk --decay 0.99
+# Set up Instructions
+1. Clone the repositiory and switch to <final-submission> branch:
+    git clone <url>
+    cd cs-175
+    git checkout final-submission
 
-# Score-weighted updates (smoother)
-python3 expirements/old_english_start_bigram_push.py --mode weighted --decay 0.99 --weight-scale 200
+2. Install dependencies
+    pip install -r requirements.txt
 
-# Optional anti-copy filter
-python3 expirements/old_english_start_bigram_push.py --mode topk --anti-copy
-```
+3. Run the final notebook:
+    Open notebooks/final_report.ipynb in Jupyter or VSCode, replace any file paths with your own, and run. 
+    This notebook reproduces figures and results from the final report:
+    - All models are loaded from checkpoints in src/models/
+    - Outputs (figures) are saved in the results/ folder
+
+# Key Modules
+- src/classifier/: Contains the TransformerJudge used to evaluate generated text
+- src/monkeys: Contains the model architectures used for text generation: TransformerMonkey, LoRAMonkey, BigramModel
+-src/models/: Pretrained checkpoints for each model
+-expirements/: Scripts used to produce processed results and different approaches in pushing model output to style transfer.

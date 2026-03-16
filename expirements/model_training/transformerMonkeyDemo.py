@@ -1,7 +1,7 @@
 # Authors: Davin Makris
 # Experiment shows generating text prompts from a model trained on old english dataset.
 
-from monkeys.TransformerMonkey import CharTokenizer, TransformerMonkey
+from src.monkeys.TransformerMonkey import CharTokenizer, TransformerMonkey
 from pathlib import Path
 import torch
 
