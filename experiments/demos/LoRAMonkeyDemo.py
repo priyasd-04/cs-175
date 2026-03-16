@@ -1,3 +1,7 @@
+# Authors: Davin Makris
+# Early experiment showing the evolution of outputs corresponding with increase in judge score, using old tfidf judge.
+
+
 from src.monkeys.TransformerMonkey import TransformerMonkey, CharTokenizer
 from src.monkeys.LoRAMonkey import LoRAMonkey
 from pathlib import Path
