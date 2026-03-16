@@ -1,6 +1,7 @@
 # cs-175
 
 **Team Name:** Gradient Ascent
+
 **Team Members:** Priya Deshmukh, Davin Makris, Amish Kunal
 
 This repository contains the code, models, and results for our CS 175 final project. The focus of this project is on evaluating different langauge models and techniques for generating Shakespeare-like text using various methods to evaluate which will attain style transfer.
