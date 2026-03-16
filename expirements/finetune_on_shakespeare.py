@@ -13,6 +13,7 @@ Run:
 from __future__ import annotations
 
 import argparse
+import csv
 import sys
 from pathlib import Path
 
@@ -163,6 +164,10 @@ def main() -> None:
         "All the world's a stage ",
     ]
 
+    results_dir = REPO_ROOT / "results"
+    results_dir.mkdir(exist_ok=True)
+    score_rows: list[dict] = []
+
     print("\nBefore fine-tune:")
     for p in prompts:
         out = generate(model, tokenizer, p, device=device, max_new_tokens=args.max_new)
@@ -170,6 +175,7 @@ def main() -> None:
         print(f"\nPrompt: {p!r}")
         print(f"Score:  {score:.4f}")
         print(f"Text:   {out}")
+        score_rows.append({"prompt": p.strip(), "stage": "before", "score": f"{score:.4f}", "text": out[:200]})
 
     print("\nFine-tuning on Shakespeare...")
     finetune_lm(
@@ -190,6 +196,14 @@ def main() -> None:
         print(f"\nPrompt: {p!r}")
         print(f"Score:  {score:.4f}")
         print(f"Text:   {out}")
+        score_rows.append({"prompt": p.strip(), "stage": "after", "score": f"{score:.4f}", "text": out[:200]})
+
+    csv_path = results_dir / f"finetune_scores_{args.tune}.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["prompt", "stage", "score", "text"])
+        writer.writeheader()
+        writer.writerows(score_rows)
+    print(f"\nSaved scores: {csv_path}")
 
     out_path = (REPO_ROOT / args.out).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)

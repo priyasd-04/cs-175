@@ -1,13 +1,23 @@
+import csv
+import os
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+
+REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
 import classifier.judge
 from monkeys.evolution import *
-import matplotlib.pyplot as plt
 
 target = "So is it in the music of men's lives. And here have I the daintiness of ear"
 
 sj = classifier.judge.Noise_Shakespeare_Classifier()
 sj.train("noise_dataset/noise.txt")
 
-def evolve2(target, population_size=200, max_generations=1000, mutation_rate=0.02): #borrowing this, but taking all best monkeys
+def evolve2(target, population_size=200, max_generations=1000, mutation_rate=0.02):
     length = len(target)
     population = [random_monkey(length) for _ in range(population_size)]
     
@@ -46,14 +56,28 @@ best_individuals, best_scores = evolve2(target, max_generations=5000)
 
 probas = sj.shakespeare_likeliness(best_individuals)
 
-def plot_evolution_progress(scores, probabilities):
-    plt.plot(scores, label='Fitness')
-    plt.plot(probabilities, label='Judge Prob')
+results_dir = Path(REPO_ROOT) / "results"
+results_dir.mkdir(exist_ok=True)
 
-    plt.xlabel('Generation')
-    plt.ylabel('Score')
-    plt.legend()
-    plt.show()
+csv_path = results_dir / "evolution_proba_across_generations.csv"
+with open(csv_path, "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["generation", "fitness", "judge_prob"])
+    for i, (score, prob) in enumerate(zip(best_scores, probas)):
+        writer.writerow([i, f"{score:.6f}", f"{prob:.6f}"])
+print(f"Saved CSV: {csv_path}")
 
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.plot(best_scores, label="Fitness (char match)", linewidth=1.5)
+ax.plot(probas, label="Judge Prob (Shakespeare)", linewidth=1.5)
+ax.set_xlabel("Generation")
+ax.set_ylabel("Score")
+ax.set_title("Evolution Progress: Fitness vs Judge Score")
+ax.legend()
+ax.grid(True, alpha=0.3)
+fig.tight_layout()
 
-plot_evolution_progress(best_scores, probas)
+plot_path = results_dir / "evolution_proba_across_generations.png"
+fig.savefig(plot_path, dpi=150)
+plt.close(fig)
+print(f"Saved plot: {plot_path}")

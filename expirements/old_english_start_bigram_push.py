@@ -13,11 +13,14 @@ from __future__ import annotations
 
 import argparse
 import binascii
+import csv
 import os
 import sys
 from pathlib import Path
 from statistics import mean
 from typing import Any, Optional, Sequence
+
+import matplotlib.pyplot as plt
 
 REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
 if REPO_ROOT not in sys.path:
@@ -66,13 +69,26 @@ def _percentile(sorted_vals: Sequence[float], p: float) -> float:
     return float(sorted_vals[idx])
 
 
-def _summarize(tag: str, scores: Sequence[float]) -> None:
+def _stats(scores: Sequence[float]) -> dict:
     s = sorted(float(x) for x in scores)
+    return {
+        "n": len(s),
+        "mean": mean(s),
+        "p25": _percentile(s, 0.25),
+        "p50": _percentile(s, 0.50),
+        "p75": _percentile(s, 0.75),
+        "max": s[-1],
+    }
+
+
+def _summarize(tag: str, scores: Sequence[float]) -> dict:
+    st = _stats(scores)
     print(
-        f"{tag:>10s} | n={len(s):4d} | mean={mean(s):.4f} | "
-        f"p25={_percentile(s, 0.25):.4f} p50={_percentile(s, 0.50):.4f} "
-        f"p75={_percentile(s, 0.75):.4f} | max={s[-1]:.4f}"
+        f"{tag:>10s} | n={st['n']:4d} | mean={st['mean']:.4f} | "
+        f"p25={st['p25']:.4f} p50={st['p50']:.4f} "
+        f"p75={st['p75']:.4f} | max={st['max']:.4f}"
     )
+    return st
 
 
 def _iter_seed(base_seed: int, it: int, i: int) -> int:
@@ -257,12 +273,18 @@ def main() -> None:
         )
 
     # 3) Iteratively push bigram toward Shakespeare.
+    results_dir = Path(REPO_ROOT) / "results"
+    results_dir.mkdir(exist_ok=True)
+
+    iteration_rows: list[dict] = []
+
     print("\nIterating...")
     for it in range(args.iterations):
         samples = [bigram.generate(args.sample_len, seed=_iter_seed(args.seed, it, i)) for i in range(args.n_samples)]
         scores = judge.shakespeare_likeliness(samples)
 
-        _summarize(f"iter{it}", scores)
+        st = _summarize(f"iter{it}", scores)
+        iteration_rows.append({"iteration": it, **st})
 
         keep_mask: list[bool] = [True] * len(samples)
         if anti_copy is not None:
@@ -284,7 +306,6 @@ def main() -> None:
             best_texts = [t for _, t in filtered[: args.top_k]]
             bigram.partial_fit(best_texts, decay=args.decay)
         else:
-            # Normalize weights, then scale so update magnitude is meaningful.
             total = float(sum(max(0.0, s) for s in scores)) or 1.0
             scale = float(args.weight_scale) if args.weight_scale is not None else float(args.top_k)
             weights = [scale * (max(0.0, s) / total) for s in scores]
@@ -299,6 +320,42 @@ def main() -> None:
     print("\nTop samples (end):")
     for p, t in top:
         print(f"p={p:.4f} | {t[:140]}...")
+
+    # --- Save CSV ---
+    suffix = f"{args.mode}"
+    if args.anti_copy:
+        suffix += "_anticopy"
+    if args.decay is not None:
+        suffix += f"_decay{args.decay}"
+    csv_path = results_dir / f"bigram_push_{suffix}.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["iteration", "n", "mean", "p25", "p50", "p75", "max"])
+        writer.writeheader()
+        writer.writerows(iteration_rows)
+    print(f"\nSaved iteration stats: {csv_path}")
+
+    # --- Save plot ---
+    iters = [r["iteration"] for r in iteration_rows]
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(iters, [r["mean"] for r in iteration_rows], label="Mean", linewidth=2)
+    ax.fill_between(
+        iters,
+        [r["p25"] for r in iteration_rows],
+        [r["p75"] for r in iteration_rows],
+        alpha=0.25,
+        label="p25–p75",
+    )
+    ax.plot(iters, [r["max"] for r in iteration_rows], "--", label="Max", alpha=0.7)
+    ax.set_xlabel("Iteration")
+    ax.set_ylabel("Judge Score (Shakespeare probability)")
+    ax.set_title(f"Bigram Push: OE → Shakespeare ({args.mode})")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    plot_path = results_dir / f"bigram_push_{suffix}.png"
+    fig.savefig(plot_path, dpi=150)
+    plt.close(fig)
+    print(f"Saved plot: {plot_path}")
 
 
 if __name__ == "__main__":
