@@ -21,7 +21,8 @@ This repository contains the code, models, and results for our CS 175 final proj
     results/     # generated figures and qualitative metrics from expirements
     requirements.txt
     README.md
-    .gitignore ```
+    .gitignore
+```
     
 
 # Set up Instructions
@@ -30,10 +31,12 @@ This repository contains the code, models, and results for our CS 175 final proj
     git clone <url>
     cd cs-175
     git checkout final-submission
+    ```
 
 3. Install dependencies
    ```
     pip install -r requirements.txt
+   ```
 
 5. Run the final notebook:
    
