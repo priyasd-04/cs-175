@@ -1,3 +1,4 @@
+# Author(s): Amish Kunal
 """Build a labeled eval set with 0-shot and few-shot prompts.
 
 Run:
@@ -20,10 +21,10 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-from monkeys.bigram import BigramModel
-from monkeys.generator import random_monkey
-from monkeys.TransformerMonkey import CharTokenizer, TransformerMonkey
-from utils.load_datasets import load_old_english_dataset, load_shakespeare_dataset
+from src.monkeys.bigram import BigramModel
+from src.monkeys.generator import random_monkey
+from src.monkeys.TransformerMonkey import CharTokenizer, TransformerMonkey
+from src.utils.load_datasets import load_old_english_dataset, load_shakespeare_dataset
 
 
 @dataclass

@@ -1,3 +1,4 @@
+# Author(s): Amish Kunal
 """Fine-tune the transformer monkey on Shakespeare.
 
 Loads the base transformer + tokenizer from `models/transformer_judge.pt`,

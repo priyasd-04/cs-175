@@ -1,3 +1,4 @@
+# Author(s): Amish Kunal
 """
 Character-level bigram language model ("bigram monkey").
 

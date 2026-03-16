@@ -1,3 +1,4 @@
+# Author(s): Amish Kunal
 """Sensitivity experiment: vary the negative mix for transformer judge training.
 
 Runs train_transformer_judge.py with each --negatives variant,

@@ -1,3 +1,4 @@
+# Author(s): Amish Kunal
 """Evaluate perplexity of different text sources under a Shakespeare-finetuned LM.
 
 Fine-tunes a TransformerMonkey on Shakespeare (if no checkpoint provided),

@@ -1,3 +1,4 @@
+# Author(s): Amish Kunal
 """Old English start to Shakespeare push (bigram).
 
 Start a character-level bigram model from an Old English

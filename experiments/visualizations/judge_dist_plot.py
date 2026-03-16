@@ -1,8 +1,5 @@
+# Author(s): Priya Deshmukh
 """Plot score distributions for both judges across all text categories.
-
-Drop this in your experiments/ folder and run:
-  python3 experiments/plot_judge_scores.py
-
 Saves: results/judge_score_distributions.png
 """
 
@@ -26,23 +23,22 @@ from src.monkeys.bigram import BigramModel
 from src.monkeys.generator import random_monkey
 from src.utils.load_datasets import load_old_english_dataset, load_shakespeare_dataset
 
-# ── config ────────────────────────────────────────────────────────────────────
+# config
 JUDGE_CKPT   = "models/transformer_judge.pt"
 NOISE_FILE   = "noise_dataset/noise.txt"
 N_SAMPLES    = 60       # samples per category
 SAMPLE_LEN   = 300
 OUT_DIR      = REPO_ROOT / "results"
-# ──────────────────────────────────────────────────────────────────────────────
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# ── load TF-IDF judge ─────────────────────────────────────────────────────────
+# load TF-IDF judge 
 print("Loading TF-IDF judge...")
 tfidf = Noise_Shakespeare_Classifier()
 noise_path = (REPO_ROOT / NOISE_FILE).resolve()
 tfidf.train(str(noise_path), show_report=False)
 
-# ── load transformer judge ────────────────────────────────────────────────────
+# load transformer judge 
 print("Loading transformer judge...")
 ckpt_path = (REPO_ROOT / JUDGE_CKPT).resolve()
 try:
@@ -74,7 +70,7 @@ def score_transformer(texts):
             scores.append(tr_judge(x, lengths=lengths, pad_id=0).item())
     return scores
 
-# ── build text samples ────────────────────────────────────────────────────────
+#  build text samples 
 print("Generating samples...")
 sp   = list(load_shakespeare_dataset(0.0, 0.0))
 oe   = list(load_old_english_dataset(0.0, 0.0))
@@ -87,12 +83,12 @@ categories = {
     "Random\nnoise":         [random_monkey(SAMPLE_LEN) for _ in range(N_SAMPLES)],
 }
 
-# ── score everything ──────────────────────────────────────────────────────────
+# score everything 
 print("Scoring...")
 tfidf_scores = {k: tfidf.shakespeare_likeliness(v) for k, v in categories.items()}
 tr_scores    = {k: score_transformer(v)             for k, v in categories.items()}
 
-# ── plot ──────────────────────────────────────────────────────────────────────
+# plot 
 COLORS = {
     "Shakespeare\n(real)":  "#2ecc71",
     "Old English\n(real)":  "#3498db",

@@ -1,3 +1,4 @@
+# Author(s): Amish Kunal
 """Compare TF-IDF judge vs transformer judge.
 
 Run:

@@ -1,3 +1,4 @@
+# Author(s): Amish Kunal
 """Train and save a Transformer-based Shakespeare judge.
 
 Binary classifier head on top of a frozen TransformerMonkey.

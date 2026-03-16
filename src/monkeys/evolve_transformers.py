@@ -1,3 +1,5 @@
+# Author(s): Amish Kunal
+"""Evolve a transformer monkey's lm_head using a fixed transformer judge."""
 import copy
 import argparse
 from pathlib import Path

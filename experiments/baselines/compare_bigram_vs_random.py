@@ -1,3 +1,4 @@
+# Author(s): Amish Kunal
 """
 Compare random monkeys vs. bigram-trained monkeys using the current "judge".
 """
