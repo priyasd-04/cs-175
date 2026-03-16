@@ -1,3 +1,5 @@
+# Author(s): Priya Deshmukh
+# Initial evolution framework, used in beginning models and as a baseline for later experiments
 import random
 from monkeys.generator import random_monkey
 from classifier.judge import Noise_Shakespeare_Classifier

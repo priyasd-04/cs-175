@@ -1,3 +1,7 @@
+# Author(s): Priya Deshmukh
+# Transformer-based judge model for Shakespeare-likeliness classification.
+
+
 from __future__ import annotations
 
 import torch
@@ -41,7 +45,7 @@ class TransformerJudge(nn.Module):
             idx: LongTensor of shape (B, T) with token ids.
             lengths: Optional LongTensor of shape (B,) giving the number of
                 non-padding tokens per row. If provided, we take the hidden
-                state at lengths-1. If omitted, we use the last position (T-1).
+                state at lengths-1. If not, we use the last position (T-1).
             pad_id: Token id used for padding (only relevant when lengths is provided).
         """
         with torch.no_grad():
