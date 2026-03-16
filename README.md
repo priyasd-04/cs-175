@@ -7,21 +7,22 @@ This repository contains the code, models, and results for our CS 175 final proj
 
 # Repository Structure
 cs-175/
-├── src/ # contains main code and modules
-│ ├── classifier/ # judge classifier model
-│ ├── monkeys/ # generator model architectures (TransformerMonkey, LoRAMonkey, Bigram)
-│ ├── models/ # saved model checkpoints (.pt files)
-│ ├── tokenizers/ # tokenizers
-│ └── utils/ # data loading / preprocessing
-├── experiments/ # experimental scripts
-├── notebooks/ # final report notebook
-│ └── final_report.ipynb
-├── data/ # generated dataset
-│ └── noise_dataset/
-├── results/ # generated figures and qualitative metrics from experiments
-├── README.md
-├── requirements.txt
-└── .gitignore
+    src/     # contains main code / modules
+        classifier/     # judge classfier models
+        monkeys/     # generator model architectures (TransformerMonkey, LoRAMonkey, Bigram)
+        models/     # saved model checkpoints (.pt files)
+        tokenizers/     # tokenizers used by models
+        utils/     # data loading 
+
+    experiments/     # experimental scripts
+    notebooks/
+        final_report.ipynb     # final report notebook
+    noise_dataset/     # generated dataset
+    results/     # generated figures and qualitative metrics from expirements
+    requirements.txt
+    README.md
+    .gitignore
+    
 
 # Set up Instructions
 1. **Clone the repositiory and switch to <final-submission> branch:**
