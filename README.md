@@ -1,50 +1,51 @@
 # cs-175
 
-Team Name: Gradient Ascent
-Team Members: Priya Deshmukh, Davin Makris, Amish Kunal
+**Team Name:** Gradient Ascent
+**Team Members:** Priya Deshmukh, Davin Makris, Amish Kunal
 
 This repository contains the code, models, and results for our CS 175 final project. The focus of this project is on evaluating different langauge models and techniques for generating Shakespeare-like text using various methods to evaluate which will attain style transfer.
 
 # Repository Structure
 cs-175/
-├── src/                  # contains main code and modules
-│   ├── classifier/       # judge classifier model
-│   ├── monkeys/          # generator model architectures (TransformerMonkey, LoRAMonkey, Bigram)
-│   ├── models/           # saved model checkpoints (.pt files)
-│   ├── tokenizers/       # tokenizers 
-│   └── utils/            # data loading / preprocessing
-│
-├── experiments/          # expiremental scripts 
-│
-├── notebooks/            # final report notebook
-│   └── final_report.ipynb
-│
-├── data/                 # generated dataset
-│   └── noise_dataset/
-│
-├── results/              # generated figures and qaulitative metrics from expirements
-│
+├── src/ # contains main code and modules
+│ ├── classifier/ # judge classifier model
+│ ├── monkeys/ # generator model architectures (TransformerMonkey, LoRAMonkey, Bigram)
+│ ├── models/ # saved model checkpoints (.pt files)
+│ ├── tokenizers/ # tokenizers
+│ └── utils/ # data loading / preprocessing
+├── experiments/ # experimental scripts
+├── notebooks/ # final report notebook
+│ └── final_report.ipynb
+├── data/ # generated dataset
+│ └── noise_dataset/
+├── results/ # generated figures and qualitative metrics from experiments
 ├── README.md
 ├── requirements.txt
 └── .gitignore
 
 # Set up Instructions
-1. Clone the repositiory and switch to <final-submission> branch:
+1. **Clone the repositiory and switch to <final-submission> branch:**
+   ```
     git clone <url>
     cd cs-175
     git checkout final-submission
 
-2. Install dependencies
+3. Install dependencies
+   ```
     pip install -r requirements.txt
 
-3. Run the final notebook:
-    Open notebooks/final_report.ipynb in Jupyter or VSCode, replace any file paths with your own, and run. 
+5. Run the final notebook:
+   
+    Open notebooks/final_report.ipynb in Jupyter or VSCode, replace any file paths with your own, and run.
+ 
     This notebook reproduces figures and results from the final report:
+   
     - All models are loaded from checkpoints in src/models/
     - Outputs (figures) are saved in the results/ folder
 
 # Key Modules
-- src/classifier/: Contains the TransformerJudge used to evaluate generated text
-- src/monkeys: Contains the model architectures used for text generation: TransformerMonkey, LoRAMonkey, BigramModel
--src/models/: Pretrained checkpoints for each model
--expirements/: Scripts used to produce processed results and different approaches in pushing model output to style transfer.
+
+- ```src/classifier/```: Contains the TransformerJudge used to evaluate generated text
+- ```src/monkeys```: Contains the model architectures used for text generation: TransformerMonkey, LoRAMonkey, BigramModel
+-```src/models/```: Pretrained checkpoints for each model
+-```expirements/```: Scripts used to produce processed results and different approaches in pushing model output to style transfer.
