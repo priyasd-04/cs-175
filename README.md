@@ -56,3 +56,23 @@ cs-175/
 - ```src/monkeys```: Contains the model architectures used for text generation: TransformerMonkey, LoRAMonkey, BigramModel
 - ```src/models/```: Pretrained checkpoints for each model
 - ```expirements/```: Scripts used to produce processed results and different approaches in pushing model output to style transfer.
+
+
+# Libraries Used
+- torch (PyTorch): Transformer architecture and training
+- datasets (Hugging Face): loading Shakespeare and Old English datasets
+- sklearn: TF-IDF vectorizer + Logistic Regression judge
+- numpy: numerical operations
+- matplotlib: plotting + visualizations
+- ntlk: text preprocessing + tokenization
+
+# Publicly Available Code / Repositories
+- Tiny Shakespeare dataset: https://huggingface.co/datasets/Trelis/tiny-shakespeare
+- Old English dataset: https://huggingface.co/datasets/apssg96/the-old-english-dataset
+
+# Code We Wrote
+- src/monkeys/: all generator implementations
+- src/classifier/: both judge implementations
+- src/utils/: data loading utilities
+- expirements/: all experiement and plotting scripts
+- notebooks/project.ipynb: demonstration notebook
