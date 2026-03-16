@@ -1,3 +1,7 @@
+# Authors: Davin Makris
+# Experiment shows finetuning different sizes of models, ultimately settling on the final hyperparameters shown in main.
+# Took ~12 hours on a RTX3070 gpu to train. 
+
 from monkeys.TransformerMonkey import train_monkey
 
 #Past Models

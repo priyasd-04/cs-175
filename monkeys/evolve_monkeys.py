@@ -1,4 +1,6 @@
-# evolution.py
+# Author(s): Priya Deshmukh
+# adapted from evolution.py
+# Used to evolve transformer monkeys using judge output (this file edits the whole model not just the lm_head, and was not used for final expirementation)
 import copy
 import torch
 import random

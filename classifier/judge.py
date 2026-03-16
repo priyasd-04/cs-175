@@ -1,17 +1,12 @@
+# Authors: Davin Makris
+# Initial tf-idf judge using sklearn. Ended up not being a very good judge.
+
 import sklearn
 from utils.load_datasets import load_shakespeare_dataset
 from monkeys.generator import random_monkey
 from random import randint
 from os import makedirs, path
 import numpy as np
-
-#just leaving this here, i don't think we'll have a big enough corpus to train a very large
-#tokenizer, it'll probably be easy to just use something pre-trained, gpt2 seems nice
-
-# tokenizer idea (not used in baseline):
-# tokenizer = transformers.AutoTokenizer.from_pretrained("gpt2")
-# tokens = tokenizer("We should use the gpt2 tokenizer")
-# print(tokenizer.decode(tokens["input_ids"]))
 
 class Noise_Shakespeare_Classifier:
     def __init__(self, seed=13625442):

@@ -1,3 +1,6 @@
+# Authors: Davin Makris
+# Utility code to create validation and test splits for our datasets.
+
 import datasets
 from sklearn.model_selection import train_test_split
 

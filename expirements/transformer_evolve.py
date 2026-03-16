@@ -1,3 +1,5 @@
+# Author(s): Priya Deshmukh
+# Run the evolution experiment to evolve a line of text towards Shakespeare-likeliness as judged by a transformer-based judge. 
 import random
 import torch
 

@@ -1,3 +1,6 @@
+# Authors: Davin Makris
+# Early experiment showing the evolution of outputs corresponding with increase in judge score, using old tfidf judge.
+
 import csv
 import os
 import sys

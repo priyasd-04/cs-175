@@ -1,3 +1,5 @@
+# Author(s): Priya Deshmukh
+# Random monkey generation, baseline monkey
 import random
 import string
 

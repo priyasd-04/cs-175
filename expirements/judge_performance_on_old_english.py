@@ -1,3 +1,6 @@
+# Authors: Davin Makris
+# Early experiment measuring the effectiveness of tf-idf judge 
+
 from classifier import judge
 from utils.load_datasets import load_old_english_dataset
 import matplotlib.pyplot as plt
